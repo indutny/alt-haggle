@@ -32,7 +32,12 @@ interface IDefiniteServerOptions {
 
 export class Server extends http.Server {
   private readonly generator: Generator;
-  private readonly ws: ws.Server = new ws.Server({ server: this });
+  private readonly ws: ws.Server = new ws.Server({
+    server: this,
+
+    // This is already too much
+    maxPayload: 16 * 1024,
+  });
   private readonly pool: Set<Player> = new Set();
   private readonly options: IDefiniteServerOptions;
   private activeGames: number = 0;

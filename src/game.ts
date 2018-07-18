@@ -56,13 +56,14 @@ export class Game {
 
         return this.result(offer!, this.invertOffer(offer!));
       }
+      this.validateOffer(counterOffer);
       offer = this.invertOffer(counterOffer);
 
       counterOffer = await this.second.step(this.id, offer);
-
       if (counterOffer === undefined) {
         return this.result(this.invertOffer(offer!), offer!);
       }
+      this.validateOffer(counterOffer);
       offer = this.invertOffer(counterOffer);
     }
 
@@ -72,6 +73,12 @@ export class Game {
       first: 0,
       second: 0,
     };
+  }
+
+  private validateOffer(offer: Offer): void {
+    if (offer.length !== this.config.counts.length) {
+      throw new Error('Invalid offer');
+    }
   }
 
   private invertOffer(offer: Offer): Offer {

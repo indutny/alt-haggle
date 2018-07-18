@@ -12,7 +12,7 @@ type Request = { kind: 'init' } |
     { kind: 'start', game: string, config: IConfig } |
     { kind: 'step', game: string, offer: Offer | undefined };
 
-type RequestCallback = (err: Error | undefined, res?: Response) => void;
+type RequestCallback = (err: Error | undefined, res?: any) => void;
 type RequestMap = Map<number, RequestCallback>;
 
 export interface IPlayerOptions {
@@ -56,7 +56,15 @@ export class Player extends EventEmitter {
   }
 
   public async step(game: string, offer?: Offer): Promise<Offer | undefined> {
-    return undefined;
+    const raw = await this.send({ kind: 'step', game, offer });
+
+    const { error, value } = Joi.validate(raw, schema.StepResponse);
+    if (error) {
+      this.ws.emit('error', error);
+      throw error;
+    }
+
+    return value.offer;
   }
 
   private onMessage(data: ws.Data) {
@@ -79,13 +87,13 @@ export class Player extends EventEmitter {
 
     if (this.requests.has(packet.seq!)) {
       // Execute callback
-      this.requests.get(packet.seq!)!(packet.payload!);
+      this.requests.get(packet.seq!)!(undefined, packet.payload!);
     } else {
       return this.ws.emit('error', new Error('Unexpected seq: ' + packet.seq));
     }
   }
 
-  private async send(req: Request): Promise<Response> {
+  private async send(req: Request): Promise<any> {
     await new Promise((resolve, reject) => {
       this.ws.send(JSON.stringify(req), (err?: Error) => {
         if (!err) {
@@ -95,7 +103,7 @@ export class Player extends EventEmitter {
       });
     });
 
-    return new Promise<Response>((resolve, reject) => {
+    return new Promise((resolve, reject) => {
       let seq = this.lastSeq++;
 
       const callback: RequestCallback = (err, response) => {
