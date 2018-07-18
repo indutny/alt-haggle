@@ -1,4 +1,5 @@
-type Counts = ReadonlyArray<number>;
+export type Counts = ReadonlyArray<number>;
+export type Values = ReadonlyArray<number>;
 
 interface IObjectSet {
   readonly counts: Counts;
