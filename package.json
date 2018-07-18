@@ -1,0 +1,31 @@
+{
+  "name": "alt-haggle",
+  "version": "1.0.0",
+  "private": true,
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "build": "tsc",
+    "clean": "rm -rf lib",
+    "prepare": "npm run clean && npm run build",
+    "lint": "tslint -c tslint.json src/**/*.ts test/**/*.ts",
+    "fix-lint": "npm run lint -- --fix",
+    "mocha": "mocha --timeout=10000 -r ts-node/register/type-check --reporter spec test/*-test.ts",
+    "test": "npm run mocha && npm run lint"
+  },
+  "keywords": [],
+  "author": "Fedor Indutny <fedor@indutny.com> (http://darksi.de/)",
+  "license": "MIT",
+  "devDependencies": {
+    "@types/debug": "0.0.30",
+    "@types/mocha": "^5.2.5",
+    "@types/node": "^10.5.2",
+    "mocha": "^5.2.0",
+    "ts-node": "^7.0.0",
+    "tslint": "^5.11.0",
+    "typescript": "^2.9.2"
+  },
+  "dependencies": {
+    "debug": "^3.1.0"
+  }
+}
