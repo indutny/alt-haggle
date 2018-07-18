@@ -1,12 +1,16 @@
 import * as ws from 'ws';
 import * as debugAPI from 'debug';
 import * as http from 'http';
+import { Verifier } from 'proof-of-work';
+import { Buffer } from 'buffer';
 
 import { Generator } from './generator';
 import { Player } from './player';
 import { Game, IGameResult } from './game';
 
 const debug = debugAPI('alt-haggle:server');
+
+const POW_PREFIX = Buffer.from('alt-haggle');
 
 export interface IServerOptions {
   readonly complexity?: number;
@@ -42,6 +46,7 @@ export class Server extends http.Server {
     // This is already too much
     maxPayload: 16 * 1024,
   });
+  private readonly pow: Verifier;
   private readonly pool: Set<Player> = new Set();
   private readonly options: IDefiniteServerOptions;
   private activeGames: number = 0;
@@ -50,11 +55,11 @@ export class Server extends http.Server {
     super();
 
     this.options = Object.assign({
-      complexity: 16, // proof-of-work
+      complexity: 19, // proof-of-work
 
       initTimeout: 120000, // 2 min
       timeout: 2000, // 2 seconds
-      parallelGames: 1000,
+      parallelGames: 1,
 
       types: 3,
       minObj: 1,
@@ -62,6 +67,13 @@ export class Server extends http.Server {
       total: 10,
       maxRounds: 5,
     }, options);
+
+    this.pow = new Verifier({
+      size: 1024,
+      n: 16,
+      complexity: this.options.complexity,
+      prefix: POW_PREFIX,
+    });
 
     // TODO(indutny): just pass the object
     this.generator = new Generator(this.options.types, this.options.minObj,
@@ -75,17 +87,27 @@ export class Server extends http.Server {
   private async onConnection(socket: ws) {
     const p = new Player(socket, {
       complexity: this.options.complexity,
+      prefix: POW_PREFIX,
+
       initTimeout: this.options.initTimeout,
       timeout: this.options.timeout,
     });
 
+    let challenge: Buffer;
     try {
-      await p.init();
+      challenge = await p.init();
     } catch (e) {
       debug('Failed to init player due to error', e);
       return;
     }
 
+    if (!this.pow.check(challenge)) {
+      p.close();
+      debug('Invalid proof-of-work challenge');
+      return;
+    }
+
+    debug('Challenge passed!');
     this.pool.add(p);
     p.once('close', () => {
       this.pool.delete(p);
@@ -107,7 +129,7 @@ export class Server extends http.Server {
     }
 
     // Enough games, though!
-    while (this.activeGames <= this.options.parallelGames) {
+    while (this.activeGames < this.options.parallelGames) {
       this.activeGames++;
 
       this.playGame().then((result: IGameResult) => {

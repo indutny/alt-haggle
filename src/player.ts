@@ -3,16 +3,19 @@ import * as debugAPI from 'debug';
 import { EventEmitter } from 'events';
 import * as ws from 'ws';
 import * as Joi from 'joi';
+import { Buffer } from 'buffer';
 
-import { Offer, IConfig } from './game';
+import { Offer, IConfig, IOpponentResult } from './game';
 import * as schema from './schema';
 
 const debug = debugAPI('alt-haggle:player');
 
 const VERSION = 1;
 
-type Request = { kind: 'init', version: number, complexity: number } |
+type Request =
+    { kind: 'init', version: number, complexity: number, prefix: string } |
     { kind: 'start', game: string, config: IConfig } |
+    { kind: 'end', game: string, result: IOpponentResult } |
     { kind: 'step', game: string, offer: Offer | undefined };
 
 type RequestCallback = (err: Error | undefined, res?: any) => void;
@@ -20,6 +23,7 @@ type RequestMap = Map<number, RequestCallback>;
 
 export interface IPlayerOptions {
   readonly complexity: number;
+  readonly prefix: Buffer;
   readonly timeout: number;
   readonly initTimeout: number;
 }
@@ -38,7 +42,6 @@ export class Player extends EventEmitter {
 
     this.ws.on('error', (err) => {
       debug('Socket error', err);
-      this.ws.terminate();
       this.close();
     });
 
@@ -63,11 +66,12 @@ export class Player extends EventEmitter {
     return this.privHash;
   }
 
-  public async init() {
+  public async init(): Promise<Buffer> {
     const raw = await this.send({
       kind: 'init',
       version: VERSION,
       complexity: this.options.complexity,
+      prefix: this.options.prefix.toString('hex'),
     }, this.options.initTimeout);
 
     const { error, value } = Joi.validate(raw, schema.InitResponse);
@@ -77,22 +81,42 @@ export class Player extends EventEmitter {
     }
 
     this.privName = value.name!;
+
+    return Buffer.from(value.challenge!, 'hex');
   }
 
   public close() {
     debug('Closing client');
+    this.ws.terminate();
+    this.emit('close');
+
     for (const callback of this.requests.values()) {
       callback(new Error('Socket closed'));
     }
   }
 
   public async start(game: string, config: IConfig) {
+    debug('starting game %s', game);
     const raw = await this.send({ kind: 'start', game, config });
     const { error, value } = Joi.validate(raw, schema.StartResponse);
     if (error) {
       this.error(error);
       throw error;
     }
+
+    debug('started game %s', game);
+  }
+
+  public async end(game: string, result: IOpponentResult) {
+    debug('ending game %s', game);
+    const raw = await this.send({ kind: 'end', game, result });
+    const { error, value } = Joi.validate(raw, schema.EndResponse);
+    if (error) {
+      this.error(error);
+      throw error;
+    }
+
+    debug('ended game %s', game);
   }
 
   public async step(game: string, offer?: Offer): Promise<Offer | undefined> {
@@ -135,22 +159,24 @@ export class Player extends EventEmitter {
 
   private async send(req: Request, timeout: number = this.options.timeout)
     : Promise<any> {
+    let seq = this.lastSeq++;
+
     await new Promise((resolve, reject) => {
-      this.ws.send(JSON.stringify(req), (err?: Error) => {
+      this.ws.send(JSON.stringify({ seq, payload: req }), (err?: Error) => {
         if (!err) {
           return resolve();
         }
+        this.error(err);
         return reject(err);
       });
     });
 
     return new Promise((resolve, reject) => {
-      let seq = this.lastSeq++;
-
       const callback: RequestCallback = (err, response) => {
         clearTimeout(timer);
         this.requests.delete(seq);
         if (err) {
+          this.error(err);
           reject(err);
         } else {
           resolve(response!);
@@ -166,6 +192,11 @@ export class Player extends EventEmitter {
   }
 
   private error(err: Error): void {
+    try {
+      this.ws.send(JSON.stringify({ error: err.message }));
+    } catch (e) {
+    }
+
     this.ws.emit('error', err);
   }
 }

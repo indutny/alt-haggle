@@ -1,0 +1,107 @@
+import * as ws from 'ws';
+import * as debugAPI from 'debug';
+import { Solver } from 'proof-of-work';
+import { Buffer } from 'buffer';
+
+import { IOpponentResult } from './game';
+
+const debug = debugAPI('alt-haggle:client');
+
+export interface IClientOptions {
+  readonly address?: string;
+  readonly name: string;
+  readonly agent: IAgentConstructor;
+}
+
+interface IDefiniteClientOptions {
+  readonly address: string;
+  readonly name: string;
+  readonly agent: IAgentConstructor;
+}
+
+interface IRequest {
+  readonly seq: number;
+}
+
+export interface IAgentConstructor {
+  new(me: number, counts: ReadonlyArray<number>,
+      values: ReadonlyArray<number>, maxRounds: number,
+      log: (...args: any[]) => void): IAgent;
+}
+
+export interface IAgent {
+  offer(o: ReadonlyArray<number> | undefined)
+    : ReadonlyArray<number> | undefined;
+}
+
+export class Client {
+  private readonly options: IDefiniteClientOptions;
+  private readonly ws: ws;
+  private readonly pow: Solver = new Solver();
+  private readonly agents: Map<string, IAgent> = new Map();
+
+  constructor(options: IClientOptions) {
+    this.options = Object.assign({
+      address: 'ws://localhost:8000/',
+    }, options);
+
+    this.ws = new ws(this.options.address);
+
+    this.ws.on('message', (data) => this.onMessage(data));
+  }
+
+  private onMessage(data: ws.Data) {
+    debug('received message', data);
+
+    const msg = JSON.parse(data.toString());
+    if (msg.error) {
+      console.error(msg.error);
+      return;
+    }
+
+    const payload = msg.payload!;
+    const kind = payload.kind!;
+
+    if (kind === 'init') {
+      const prefix = Buffer.from(payload.prefix!, 'hex');
+      const challenge = this.pow.solve(payload.complexity!, prefix);
+
+      this.reply(msg!, {
+        kind: 'init',
+        name: this.options.name,
+        challenge: challenge.toString('hex'),
+      });
+    } else if (kind === 'start') {
+      this.reply(msg!, { kind: 'start' });
+
+      const config = payload.config!;
+
+      // TODO(indunty): log
+      const agent = new this.options.agent(payload.isFirst ? 1 : 0,
+          config.counts!, config.values!, config.maxRounds!,
+          () => {});
+      this.agents.set(payload.game!, agent);
+    } else if (kind === 'end') {
+      this.reply(msg!, { kind: 'end' });
+
+      this.log(payload.result);
+      this.agents.delete(payload.game!);
+    } else if (kind === 'step') {
+      const agent = this.agents.get(payload.game!)!;
+
+      const offer = agent.offer(payload.offer!);
+      this.reply(msg!, { kind: 'step', offer });
+    }
+  }
+
+  private reply(req: IRequest, response: any): void {
+    this.ws.send(JSON.stringify({
+      seq: req.seq,
+      payload: response
+    }));
+  }
+
+  private log(result: IOpponentResult): void {
+    debug(result);
+  }
+}
