@@ -41,7 +41,12 @@ export class Player extends EventEmitter {
   }
 
   public async init() {
-    await this.send({ kind: 'init' });
+    const raw = await this.send({ kind: 'init' });
+    const { error, value } = Joi.validate(raw, schema.InitResponse);
+    if (error) {
+      this.error(error);
+      throw error;
+    }
   }
 
   public close() {
@@ -52,7 +57,12 @@ export class Player extends EventEmitter {
   }
 
   public async start(game: string, config: IConfig) {
-    await this.send({ kind: 'start', game, config });
+    const raw = await this.send({ kind: 'start', game, config });
+    const { error, value } = Joi.validate(raw, schema.StartResponse);
+    if (error) {
+      this.error(error);
+      throw error;
+    }
   }
 
   public async step(game: string, offer?: Offer): Promise<Offer | undefined> {
@@ -60,7 +70,7 @@ export class Player extends EventEmitter {
 
     const { error, value } = Joi.validate(raw, schema.StepResponse);
     if (error) {
-      this.ws.emit('error', error);
+      this.error(error);
       throw error;
     }
 
@@ -69,27 +79,27 @@ export class Player extends EventEmitter {
 
   private onMessage(data: ws.Data) {
     if (typeof data !== 'string') {
-      return this.ws.emit('error', new Error('Invalid data'));
+      return this.error(new Error('Invalid data'));
     }
 
     let json: any;
     try {
       json = JSON.parse(data);
     } catch (e) {
-      return this.ws.emit('error', new Error('Invalid JSON'));
+      return this.error(new Error('Invalid JSON'));
     }
 
     const { error, value: packet } = Joi.validate(json, schema.Packet);
 
     if (error) {
-      return this.ws.emit('error', error);
+      return this.error(error);
     }
 
     if (this.requests.has(packet.seq!)) {
       // Execute callback
       this.requests.get(packet.seq!)!(undefined, packet.payload!);
     } else {
-      return this.ws.emit('error', new Error('Unexpected seq: ' + packet.seq));
+      return this.error(new Error('Unexpected seq: ' + packet.seq));
     }
   }
 
@@ -122,5 +132,9 @@ export class Player extends EventEmitter {
 
       this.requests.set(seq, callback);
     });
+  }
+
+  private error(err: Error): void {
+    this.ws.emit('error', err);
   }
 }
