@@ -58,7 +58,7 @@ export class Server extends http.Server {
   }
 
   private onConnection(socket: ws): void {
-    const p = new Player(socket);
+    const p = new Player(socket, { timeout: this.options.timeout });
 
     p.once('ready', () => {
       this.pool.add(p);

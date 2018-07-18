@@ -7,11 +7,17 @@ import { Offer, IConfig } from './game';
 type Message = { kind: 'init' } |
     { kind: 'start', game: string, config: IConfig };
 
-export class Player extends EventEmitter {
-  constructor(private readonly ws: ws) {
-    super();
+type Response = { kind: 'init' } |
+    { kind: 'step', game: string, offer: Offer };
 
-    this.ws.on('message', (data) => this.onMessage(data));
+export interface IPlayerOptions {
+  readonly timeout: number;
+}
+
+export class Player extends EventEmitter {
+  constructor(private readonly ws: ws,
+              private readonly options: IPlayerOptions) {
+    super();
 
     this.ws.on('error', (err) => {
       this.ws.terminate();
