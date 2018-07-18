@@ -1,3 +1,4 @@
+import * as crypto from 'crypto';
 import * as debugAPI from 'debug';
 import { EventEmitter } from 'events';
 import * as ws from 'ws';
@@ -27,6 +28,7 @@ export class Player extends EventEmitter {
   private lastSeq: number = 0;
   private readonly requests: RequestMap = new Map();
   private privName: string | undefined;
+  private privHash: string | undefined;
 
   constructor(private readonly ws: ws,
               private readonly options: IPlayerOptions) {
@@ -52,12 +54,22 @@ export class Player extends EventEmitter {
     return this.privName;
   }
 
+  public get hash(): string {
+    if (this.privHash !== undefined) {
+      return this.privHash;
+    }
+
+    this.privHash = crypto.createHash('sha256').update(this.name).digest('hex');
+    return this.privHash;
+  }
+
   public async init() {
     const raw = await this.send({
       kind: 'init',
       version: VERSION,
       complexity: this.options.complexity,
     }, this.options.initTimeout);
+
     const { error, value } = Joi.validate(raw, schema.InitResponse);
     if (error) {
       this.error(error);
