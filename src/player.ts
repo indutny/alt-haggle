@@ -73,7 +73,12 @@ export class Player extends EventEmitter {
 
     const { error, value: packet } = Joi.validate(json, schema.Packet);
 
+    if (error) {
+      return this.ws.emit('error', error);
+    }
+
     if (this.requests.has(packet.seq!)) {
+      // Execute callback
       this.requests.get(packet.seq!)!(packet.payload!);
     } else {
       return this.ws.emit('error', new Error('Unexpected seq: ' + packet.seq));
