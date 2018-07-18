@@ -1,6 +1,6 @@
 import * as crypto from 'crypto';
 
-import { Generator, Counts, Values } from './generator';
+import { IGeneratorResult, Generator, Counts, Values } from './generator';
 import { Player } from './player';
 
 type Offer = Counts;
@@ -22,7 +22,9 @@ export interface IGameResult {
 export class Game {
   private readonly id: string = crypto.randomBytes(16).toString('hex');
 
-  constructor(private readonly first: Player, private readonly second: Player) {
+  constructor(private readonly config: IGeneratorResult,
+              private readonly first: Player,
+              private readonly second: Player) {
   }
 
   public async run(): Promise<IGameResult> {

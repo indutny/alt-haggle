@@ -11,9 +11,14 @@ interface IWritableObjectSet {
   readonly valuations: Array<number[]>;
 }
 
+export interface IGeneratorValuations {
+  readonly first: Values;
+  readonly second: Values;
+};
+
 export interface IGeneratorResult {
   readonly counts: Counts;
-  readonly valuations: ReadonlyArray<Counts>;
+  readonly valuations: IGeneratorValuations;
   readonly maxRounds: number;
 }
 
@@ -74,13 +79,16 @@ export class Generator {
   private generateResults(): void {
     for (const s of this.objSets) {
       for (let i = 0; i < s.valuations.length; i++) {
-        const left = s.valuations[i];
+        const first = s.valuations[i];
         for (let j = i + 1; j < s.valuations.length; j++) {
-          const right = s.valuations[j];
+          const second = s.valuations[j];
 
           this.results.push({
             counts: s.counts,
-            valuations: [ left, right ],
+            valuations: {
+              first,
+              second,
+            },
             maxRounds: this.maxRounds,
           });
         }
@@ -102,9 +110,10 @@ export class Generator {
     if (swap) {
       res = {
         counts: res.counts,
-        valuations: [
-          res.valuations[1], res.valuations[0],
-        ],
+        valuations: {
+          first: res.valuations.second,
+          second: res.valuations.first,
+        },
         maxRounds: this.maxRounds,
       };
     }

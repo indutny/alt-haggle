@@ -97,7 +97,10 @@ export class Server extends http.Server {
       second = (Math.random() * players.length) | 0;
     } while (first === second);
 
-    const game = new Game(players[first], players[second]);
+    const seed = (Math.random() * this.generator.maxSeed) | 0;
+    const config = this.generator.get(seed);
+
+    const game = new Game(config, players[first], players[second]);
 
     const result = await game.run();
 
