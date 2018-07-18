@@ -23,8 +23,6 @@ export class Player extends EventEmitter {
       this.ws.terminate();
       this.emit('close', err);
     });
-
-    this.init();
   }
 
   private onMessage(data: ws.Data) {
@@ -41,7 +39,13 @@ export class Player extends EventEmitter {
     });
   }
 
-  private async init() {
+  private async receive(msg: Response, timeout: number = this.options.timeout) {
+    return new Promise((resolve, reject) => {
+      this.ws.once('message', (data) => this.onMessage(data));
+    });
+  }
+
+  public async init() {
     this.send({ kind: 'init' });
   }
 

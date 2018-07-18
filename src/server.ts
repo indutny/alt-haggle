@@ -1,9 +1,12 @@
 import * as ws from 'ws';
+import * as debugAPI from 'debug';
 import * as http from 'http';
 
 import { Generator } from './generator';
 import { Player } from './player';
-import { Game } from './game';
+import { Game, IGameResult } from './game';
+
+const debug = debugAPI('alt-haggle:server');
 
 export interface IServerOptions {
   readonly timeout?: number;
@@ -57,17 +60,21 @@ export class Server extends http.Server {
     this.on('request', (req, res) => this.onRequest(req, res));
   }
 
-  private onConnection(socket: ws): void {
+  private async onConnection(socket: ws) {
     const p = new Player(socket, { timeout: this.options.timeout });
 
-    p.once('ready', () => {
-      this.pool.add(p);
-      this.maybePlay();
-    });
+    try {
+      await p.init();
+    } catch (e) {
+      debug('Failed to init player due to error', e);
+    }
 
+    this.pool.add(p);
     p.once('close', () => {
       this.pool.delete(p);
     });
+
+    this.maybePlay();
   }
 
   private onRequest(req: http.IncomingMessage, res: http.ServerResponse): void {
@@ -76,17 +83,31 @@ export class Server extends http.Server {
     res.end('Not found');
   }
 
-  private async maybePlay() {
+  private maybePlay() {
     // Not enough players yet
     if (this.pool.size < 2) {
       return;
     }
 
     // Enough games, though!
-    if (this.activeGames >= this.options.parallelGames) {
-      return;
-    }
+    while (this.activeGames <= this.options.parallelGames) {
+      this.activeGames++;
 
+      this.playGame().then((result: IGameResult) => {
+        this.activeGames--;
+        console.log(result);
+
+        this.maybePlay();
+      }).catch((e) => {
+        this.activeGames--;
+        debug('Game error', e);
+
+        this.maybePlay();
+      });
+    }
+  }
+
+  private async playGame(): Promise<IGameResult> {
     // Pick two players
     // TODO(indutny): take in account number of games played?
     const players = Array.from(this.pool);
@@ -100,10 +121,11 @@ export class Server extends http.Server {
     const seed = (Math.random() * this.generator.maxSeed) | 0;
     const config = this.generator.get(seed);
 
-    const game = new Game(config, players[first], players[second]);
+    const firstPlayer = players[first];
+    const secondPlayer = players[second];
 
-    const result = await game.run();
+    const game = new Game(config, firstPlayer, secondPlayer);
 
-    console.log(result);
+    return await game.run();
   }
 }
