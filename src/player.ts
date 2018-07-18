@@ -47,6 +47,8 @@ export class Player extends EventEmitter {
       this.error(error);
       throw error;
     }
+
+    // TODO(indutny): check proof-of-work
   }
 
   public close() {
@@ -103,7 +105,8 @@ export class Player extends EventEmitter {
     }
   }
 
-  private async send(req: Request): Promise<any> {
+  private async send(req: Request, timeout: number = this.options.timeout)
+    : Promise<any> {
     await new Promise((resolve, reject) => {
       this.ws.send(JSON.stringify(req), (err?: Error) => {
         if (!err) {
@@ -117,7 +120,7 @@ export class Player extends EventEmitter {
       let seq = this.lastSeq++;
 
       const callback: RequestCallback = (err, response) => {
-        clearTimeout(timeout);
+        clearTimeout(timer);
         this.requests.delete(seq);
         if (err) {
           reject(err);
@@ -126,9 +129,9 @@ export class Player extends EventEmitter {
         }
       };
 
-      const timeout = setTimeout(() => {
+      const timer = setTimeout(() => {
         callback(new Error('Timed out'));
-      }, this.options.timeout);
+      }, timeout);
 
       this.requests.set(seq, callback);
     });
