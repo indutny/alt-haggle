@@ -101,6 +101,7 @@ export class Generator {
   }
 
   public get(seed: number): IGeneratorResult {
+    // TODO(indutny): use non-uniform sampler as in original contest
     const swap = seed % 2 === 1;
     seed >>>= 1;
 
