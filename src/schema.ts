@@ -7,6 +7,7 @@ export const Packet = Joi.object().keys({
 
 export const InitResponse = Joi.object().keys({
   kind: Joi.string().valid('init').required(),
+  name: Joi.string().required(),
   challenge: Joi.string().hex().min(64).max(64).required(),
 });
 

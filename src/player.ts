@@ -8,7 +8,9 @@ import * as schema from './schema';
 
 const debug = debugAPI('alt-haggle:player');
 
-type Request = { kind: 'init' } |
+const VERSION = 1;
+
+type Request = { kind: 'init', version: number, complexity: number } |
     { kind: 'start', game: string, config: IConfig } |
     { kind: 'step', game: string, offer: Offer | undefined };
 
@@ -16,12 +18,15 @@ type RequestCallback = (err: Error | undefined, res?: any) => void;
 type RequestMap = Map<number, RequestCallback>;
 
 export interface IPlayerOptions {
+  readonly complexity: number;
   readonly timeout: number;
+  readonly initTimeout: number;
 }
 
 export class Player extends EventEmitter {
   private lastSeq: number = 0;
   private readonly requests: RequestMap = new Map();
+  private privName: string | undefined;
 
   constructor(private readonly ws: ws,
               private readonly options: IPlayerOptions) {
@@ -40,15 +45,26 @@ export class Player extends EventEmitter {
     });
   }
 
+  public get name(): string {
+    if (this.privName === undefined) {
+      throw new Error('Name hasn\'t been sent yet');
+    }
+    return this.privName;
+  }
+
   public async init() {
-    const raw = await this.send({ kind: 'init' });
+    const raw = await this.send({
+      kind: 'init',
+      version: VERSION,
+      complexity: this.options.complexity,
+    }, this.options.initTimeout);
     const { error, value } = Joi.validate(raw, schema.InitResponse);
     if (error) {
       this.error(error);
       throw error;
     }
 
-    // TODO(indutny): check proof-of-work
+    this.privName = value.name!;
   }
 
   public close() {

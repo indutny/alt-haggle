@@ -9,6 +9,8 @@ import { Game, IGameResult } from './game';
 const debug = debugAPI('alt-haggle:server');
 
 export interface IServerOptions {
+  readonly complexity?: number;
+  readonly initTimeout?: number;
   readonly timeout?: number;
   readonly parallelGames?: number;
 
@@ -20,6 +22,8 @@ export interface IServerOptions {
 }
 
 interface IDefiniteServerOptions {
+  readonly complexity: number;
+  readonly initTimeout: number;
   readonly timeout: number;
   readonly parallelGames: number;
 
@@ -46,7 +50,10 @@ export class Server extends http.Server {
     super();
 
     this.options = Object.assign({
-      timeout: 2000,
+      complexity: 16, // proof-of-work
+
+      initTimeout: 120000, // 2 min
+      timeout: 2000, // 2 seconds
       parallelGames: 1000,
 
       types: 3,
@@ -66,12 +73,17 @@ export class Server extends http.Server {
   }
 
   private async onConnection(socket: ws) {
-    const p = new Player(socket, { timeout: this.options.timeout });
+    const p = new Player(socket, {
+      complexity: this.options.complexity,
+      initTimeout: this.options.initTimeout,
+      timeout: this.options.timeout,
+    });
 
     try {
       await p.init();
     } catch (e) {
       debug('Failed to init player due to error', e);
+      return;
     }
 
     this.pool.add(p);
