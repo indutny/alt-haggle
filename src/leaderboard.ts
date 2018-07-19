@@ -30,11 +30,30 @@ export interface ILeaderboardSingleResult {
 
 export type LeaderboardResults = ReadonlyArray<ILeaderboardSingleResult>;
 
+interface IDailySingle {
+  readonly hash: string;
+  readonly meanScore: number;
+  readonly meanAgreedScore: number;
+  readonly acceptance: number;
+  readonly sessions: number;
+}
+
+export interface IDailyTableEntry {
+  readonly hash: string;
+  readonly meanScore: number;
+  readonly meanAgreedScore: number;
+  readonly meanAcceptance: number;
+  readonly meanSessions: number;
+}
+
+export type DailyTable = ReadonlyArray<IDailyTableEntry>;
+
 export class Leaderboard {
   private readonly options: IDefiniteLeaderboardOptions;
   private readonly db: redis.RedisClient;
   private cachedResults
     : LeaderboardResults | Promise<LeaderboardResults> | undefined = undefined;
+  private cachedDaily: DailyTable | Promise<DailyTable> | undefined = undefined;
 
   constructor(options: ILeaderboardOptions = {}) {
     this.options = Object.assign({
@@ -74,6 +93,7 @@ export class Leaderboard {
     this.db.hincrby(this.options.prefix + key, 'score1', results[1].score);
   }
 
+  // TODO(indutny): use decorators
   public async getResults(): Promise<LeaderboardResults> {
     if (this.cachedResults) {
       return await this.cachedResults;
@@ -87,6 +107,24 @@ export class Leaderboard {
 
     setTimeout(() => {
       this.cachedResults = undefined;
+    }, this.options.cacheTimeout);
+
+    return res;
+  }
+
+  public async getDailyTable(): Promise<DailyTable> {
+    if (this.cachedDaily) {
+      return await this.cachedDaily;
+    }
+
+    const promise = this.fetchDailyTable();
+    this.cachedDaily = promise;
+
+    const res = await promise;
+    this.cachedDaily = res;
+
+    setTimeout(() => {
+      this.cachedDaily = undefined;
     }, this.options.cacheTimeout);
 
     return res;
@@ -128,6 +166,83 @@ export class Leaderboard {
     // Fresh results on top
     res.sort((a, b) => {
       return b.timestamp.getTime() - a.timestamp.getTime();
+    });
+
+    return res;
+  }
+
+  private async fetchDailyTable(): Promise<DailyTable> {
+    const results = await this.getResults();
+
+    const yesterday = Date.now() - 24 * 3600 * 1000;
+
+    const dailyResults = results.filter((entry) => {
+      return entry.timestamp.getTime() >= yesterday;
+    });
+
+    const map: Map<string, IDailySingle[]> = new Map();
+
+    const add = (interim: IDailySingle) => {
+      let list: IDailySingle[];
+      if (map.has(interim.hash)) {
+        list = map.get(interim.hash)!;
+      } else {
+        list = [];
+        map.set(interim.hash, list);
+      }
+
+      list.push(interim);
+    };
+
+    for (const entry of dailyResults) {
+      const sessions = entry.sessions;
+      const acceptance = entry.agreements / sessions;
+
+      entry.hashes.forEach((hash, index) => {
+        const meanScore = entry.meanScore[index];
+        const meanAgreedScore = entry.meanAgreedScore[index];
+
+        add({
+          hash,
+          meanScore,
+          meanAgreedScore,
+          acceptance,
+          sessions,
+        });
+      });
+    }
+
+    const res: IDailyTableEntry[] = [];
+
+    map.forEach((list, hash) => {
+      let meanScore = 0;
+      let meanAgreedScore = 0;
+      let acceptance = 0;
+      let sessions = 0;
+
+      for (const single of list) {
+        meanScore += single.meanScore;
+        meanAgreedScore += single.meanAgreedScore;
+        acceptance += single.acceptance;
+        sessions += single.sessions;
+      }
+
+      meanScore /= list.length;
+      meanAgreedScore /= list.length;
+      acceptance /= list.length;
+      sessions /= list.length;
+
+      res.push({
+        hash,
+        meanScore,
+        meanAgreedScore,
+        meanAcceptance: acceptance,
+        meanSessions: sessions,
+      });
+    });
+
+    res.sort((a, b) => {
+      return b.meanScore - a.meanScore;
     });
 
     return res;

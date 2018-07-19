@@ -144,8 +144,16 @@ export class Server extends http.Server {
 
   private async onRequest(req: http.IncomingMessage,
                           res: http.ServerResponse) {
+    // TODO(indutny): reduce amount copy-paste
     if (req.method === 'GET' && req.url === '/v1/standard') {
       const results = await this.leaderboard.getResults();
+      res.writeHead(200, {
+        'content-type': 'application/json',
+      });
+      res.end(JSON.stringify(results, null, 2));
+      return;
+    } else if (req.method === 'GET' && req.url === '/v1/daily') {
+      const results = await this.leaderboard.getDailyTable();
       res.writeHead(200, {
         'content-type': 'application/json',
       });
