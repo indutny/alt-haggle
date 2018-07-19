@@ -65,7 +65,7 @@ export class Server extends http.Server {
 
       initTimeout: 120000, // 2 min
       timeout: 2000, // 2 seconds
-      parallelGames: 1,
+      parallelGames: 1000,
 
       types: 3,
       minObj: 1,
