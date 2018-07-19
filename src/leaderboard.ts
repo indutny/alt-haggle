@@ -22,6 +22,8 @@ export interface ILeaderboardSingleResult {
   readonly timestamp: Date;
   readonly hashes: string[];
   readonly scores: number[];
+  readonly meanScore: number[];
+  readonly meanAgreedScore: number[];
   readonly agreements: number;
   readonly sessions: number;
 }
@@ -104,15 +106,22 @@ export class Leaderboard {
 
       const hget = promisify(this.db.hget);
 
+      const scores = [
+        await hget.call(this.db, key, 'score0') | 0,
+        await hget.call(this.db, key, 'score1') | 0,
+      ];
+
+      const sessions = await hget.call(this.db, key, 'sessions') | 0;
+      const agreements = await hget.call(this.db, key, 'agreements') | 0;
+
       res.push({
         timestamp,
         hashes,
-        scores: [
-          await hget.call(this.db, key, 'score0') | 0,
-          await hget.call(this.db, key, 'score1') | 0
-        ],
-        sessions: await hget.call(this.db, key, 'sessions') | 0,
-        agreements: await hget.call(this.db, key, 'agreements') | 0,
+        scores,
+        sessions,
+        agreements,
+        meanScore: scores.map((score) => score / sessions),
+        meanAgreedScore: scores.map((score) => score / agreements),
       });
     }));
 

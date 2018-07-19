@@ -14,7 +14,7 @@
     "test": "npm run mocha && npm run lint",
 
     "client": "ts-node ./bin/client.ts",
-    "server": "ts-node ./bin/client.ts"
+    "server": "ts-node ./bin/server.ts"
   },
   "keywords": [],
   "author": "Fedor Indutny <fedor@indutny.com> (http://darksi.de/)",
