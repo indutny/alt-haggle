@@ -96,6 +96,7 @@ export class Leaderboard {
 
     const res: ILeaderboardSingleResult[] = [];
 
+    // TODO(indutny): use hgetall
     await Promise.all(keys.map(async (key: string) => {
       const parts = key.slice(prefix.length).split(':');
       const timestamp = new Date(parseInt(parts[0], 10));
