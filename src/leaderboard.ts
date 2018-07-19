@@ -22,8 +22,8 @@ export interface ILeaderboardSingleResult {
   readonly timestamp: Date;
   readonly hashes: string[];
   readonly scores: number[];
-  readonly meanScore: number[];
-  readonly meanAgreedScore: number[];
+  readonly meanScores: number[];
+  readonly meanAgreedScores: number[];
   readonly agreements: number;
   readonly sessions: number;
 }
@@ -32,9 +32,9 @@ export type LeaderboardResults = ReadonlyArray<ILeaderboardSingleResult>;
 
 interface IDailySingle {
   readonly hash: string;
-  readonly meanScore: number;
-  readonly meanAgreedScore: number;
-  readonly acceptance: number;
+  readonly opponent: string;
+  readonly score: number;
+  readonly agreements: number;
   readonly sessions: number;
 }
 
@@ -158,8 +158,8 @@ export class Leaderboard {
         scores,
         sessions,
         agreements,
-        meanScore: scores.map((score) => score / sessions),
-        meanAgreedScore: scores.map((score) => score / agreements),
+        meanScores: scores.map((score) => score / sessions),
+        meanAgreedScores: scores.map((score) => score / agreements),
       });
     }));
 
@@ -180,33 +180,42 @@ export class Leaderboard {
       return entry.timestamp.getTime() >= yesterday;
     });
 
-    const map: Map<string, IDailySingle[]> = new Map();
+    const map: Map<string, Map<string, IDailySingle>> = new Map();
 
     const add = (interim: IDailySingle) => {
-      let list: IDailySingle[];
+      let submap: Map<string, IDailySingle>;
       if (map.has(interim.hash)) {
-        list = map.get(interim.hash)!;
+        submap = map.get(interim.hash)!;
       } else {
-        list = [];
-        map.set(interim.hash, list);
+        submap = new Map();
+        map.set(interim.hash, submap);
       }
 
-      list.push(interim);
+      let entry: IDailySingle;
+      if (submap.has(interim.opponent)) {
+        entry = submap.get(interim.opponent)!;
+        submap.set(interim.opponent, {
+          hash: interim.hash,
+          opponent: interim.opponent,
+          score: entry.score + interim.score,
+          agreements: entry.agreements + interim.agreements,
+          sessions: entry.sessions + interim.sessions,
+        });
+      } else {
+        submap.set(interim.opponent, interim);
+      }
     };
 
     for (const entry of dailyResults) {
       const sessions = entry.sessions;
-      const acceptance = entry.agreements / sessions;
+      const agreements = entry.agreements;
 
       entry.hashes.forEach((hash, index) => {
-        const meanScore = entry.meanScore[index];
-        const meanAgreedScore = entry.meanAgreedScore[index];
-
         add({
           hash,
-          meanScore,
-          meanAgreedScore,
-          acceptance,
+          opponent: entry.hashes[entry.hashes.length - index],
+          score: entry.scores[index],
+          agreements,
           sessions,
         });
       });
@@ -214,23 +223,23 @@ export class Leaderboard {
 
     const res: IDailyTableEntry[] = [];
 
-    map.forEach((list, hash) => {
+    map.forEach((submap, hash) => {
       let meanScore = 0;
       let meanAgreedScore = 0;
       let acceptance = 0;
       let sessions = 0;
 
-      for (const single of list) {
-        meanScore += single.meanScore;
-        meanAgreedScore += single.meanAgreedScore;
-        acceptance += single.acceptance;
+      for (const single of submap.values()) {
+        meanScore += single.score / single.sessions;
+        meanAgreedScore += single.score / single.agreements;
+        acceptance += single.agreements / single.sessions;
         sessions += single.sessions;
       }
 
-      meanScore /= list.length;
-      meanAgreedScore /= list.length;
-      acceptance /= list.length;
-      sessions /= list.length;
+      meanScore /= submap.size;
+      meanAgreedScore /= submap.size;
+      acceptance /= submap.size;
+      sessions /= submap.size;
 
       res.push({
         hash,
