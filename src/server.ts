@@ -65,7 +65,7 @@ export class Server extends http.Server {
       complexity: 19, // proof-of-work
 
       initTimeout: 120000, // 2 min
-      timeout: 2000, // 2 seconds
+      timeout: 30000, // 30 seconds
       parallelGames: 1000,
 
       types: 3,
