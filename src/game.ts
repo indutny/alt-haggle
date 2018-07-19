@@ -64,6 +64,7 @@ export class Game {
 
     debug('game=%s started both players', this.id);
 
+    // Default result is used on no consensus
     let result: IGameResult = {
       accept: false,
       first: 0,
@@ -124,7 +125,6 @@ export class Game {
       throw err;
     }
 
-    // Round limit
     return result;
   }
 
