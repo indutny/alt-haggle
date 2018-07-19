@@ -13,7 +13,9 @@ Alternative [haggle.js][0] server.
 To start client run:
 ```bash
 npm install
-./bin/client.ts --name your@email.com:random_static_id --script /path/to/script
+./bin/client.ts --address http://hola.darksi.de/v1/standard \
+  --name your@email.com:random_static_id \
+  --script /path/to/script
 ```
 _(NOTE: there're no logs on the client yet, but PRs are welcome!)_
 
@@ -27,7 +29,7 @@ npm install
 
 Leaderboard (updates every 5 seconds):
 ```
-http://host/v1/standard
+http://hola.darksi.de/v1/standard
 ```
 
 #### LICENSE
