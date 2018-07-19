@@ -96,7 +96,7 @@ export class Leaderboard {
 
     const res: ILeaderboardSingleResult[] = [];
 
-    const values = await Promise.all(keys.map(async (key: string) => {
+    await Promise.all(keys.map(async (key: string) => {
       const parts = key.slice(prefix.length).split(':');
       const timestamp = new Date(parseInt(parts[0], 10));
       const hashes = parts.slice(1);
@@ -114,6 +114,11 @@ export class Leaderboard {
         agreements: await hget.call(this.db, key, 'agreements') | 0,
       });
     }));
+
+    // Fresh results on top
+    res.sort((a, b) => {
+      return b.timestamp.getTime() - a.timestamp.getTime();
+    });
 
     return res;
   }
