@@ -89,7 +89,12 @@ export class Server extends http.Server {
 
     this.ws.on('connection', (socket) => this.onConnection(socket));
 
-    this.on('request', (req, res) => this.onRequest(req, res));
+    this.on('request', (req, res) => {
+      this.onRequest(req, res).catch((error) => {
+        res.writeHead(500);
+        res.end(JSON.stringify({ error }));
+      });
+    });
   }
 
   private async onConnection(socket: ws) {
@@ -128,7 +133,17 @@ export class Server extends http.Server {
     this.maybePlay();
   }
 
-  private onRequest(req: http.IncomingMessage, res: http.ServerResponse): void {
+  private async onRequest(req: http.IncomingMessage,
+                          res: http.ServerResponse) {
+    if (req.method === 'GET' && req.url === '/leaderboard') {
+      const results = await this.leaderboard.getResults();
+      res.writeHead(200, {
+        'content-type': 'application/json',
+      });
+      res.end(JSON.stringify(results, null, 2));
+      return;
+    }
+
     // TODO(indutny): leaderboard!
     res.writeHead(404);
     res.end('Not found');
