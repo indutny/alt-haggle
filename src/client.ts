@@ -77,7 +77,7 @@ export class Client {
       const config = payload.config!;
 
       // TODO(indunty): log
-      const agent = new this.options.agent(payload.isFirst ? 1 : 0,
+      const agent = new this.options.agent(payload.isFirst ? 0 : 1,
           config.counts!, config.values!, config.maxRounds!,
           () => {});
       this.agents.set(payload.game!, agent);
