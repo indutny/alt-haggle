@@ -24,7 +24,6 @@ export interface IGeneratorResult {
 
 export class Generator {
   private readonly objSets: IObjectSet[] = [];
-  private readonly results: IGeneratorResult[] = [];
 
   constructor(private readonly types: number,
               private readonly minObj: number,
@@ -35,8 +34,6 @@ export class Generator {
     if (!this.objSets.length) {
       throw new Error('Constraints cannot be satisfied');
     }
-
-    this.generateResults();
   }
 
   private initSets(counts: number[], i: number, totalCount: number): void {
@@ -76,49 +73,22 @@ export class Generator {
     }
   }
 
-  private generateResults(): void {
-    for (const s of this.objSets) {
-      for (let i = 0; i < s.valuations.length; i++) {
-        const first = s.valuations[i];
-        for (let j = i + 1; j < s.valuations.length; j++) {
-          const second = s.valuations[j];
+  public get(): IGeneratorResult {
+    const set = this.objSets[(Math.random() * this.objSets.length) | 0];
 
-          this.results.push({
-            counts: s.counts,
-            valuations: {
-              first,
-              second,
-            },
-            maxRounds: this.maxRounds,
-          });
-        }
-      }
-    }
-  }
+    const first = (Math.random() * set.valuations.length) | 0;
+    let second: number;
+    do {
+      second = (Math.random() * set.valuations.length) | 0;
+    } while (first === second);
 
-  public get maxSeed(): number {
-    return this.results.length * 2;
-  }
-
-  public get(seed: number): IGeneratorResult {
-    // TODO(indutny): use non-uniform sampler as in original contest
-    const swap = seed % 2 === 1;
-    seed >>>= 1;
-
-    let res = this.results[seed];
-
-    // Just to save some memory
-    if (swap) {
-      res = {
-        counts: res.counts,
-        valuations: {
-          first: res.valuations.second,
-          second: res.valuations.first,
-        },
-        maxRounds: this.maxRounds,
-      };
-    }
-
-    return res;
+    return {
+      counts: set.counts,
+      valuations: {
+        first: set.valuations[first],
+        second: set.valuations[second],
+      },
+      maxRounds: this.maxRounds,
+    };
   }
 }

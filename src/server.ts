@@ -193,8 +193,7 @@ export class Server extends http.Server {
       second = (Math.random() * players.length) | 0;
     } while (first === second);
 
-    const seed = (Math.random() * this.generator.maxSeed) | 0;
-    const config = this.generator.get(seed);
+    const config = this.generator.get();
 
     const firstPlayer = players[first];
     const secondPlayer = players[second];
