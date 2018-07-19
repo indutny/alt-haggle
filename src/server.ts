@@ -7,6 +7,7 @@ import { Buffer } from 'buffer';
 import { Generator } from './generator';
 import { Player } from './player';
 import { Game, IGameResult } from './game';
+import { Leaderboard, ILeaderboardOptions } from './leaderboard';
 
 const debug = debugAPI('alt-haggle:server');
 
@@ -17,6 +18,8 @@ export interface IServerOptions {
   readonly initTimeout?: number;
   readonly timeout?: number;
   readonly parallelGames?: number;
+
+  readonly leaderboard?: ILeaderboardOptions;
 
   readonly types?: number;
   readonly minObj?: number;
@@ -30,6 +33,8 @@ interface IDefiniteServerOptions {
   readonly initTimeout: number;
   readonly timeout: number;
   readonly parallelGames: number;
+
+  readonly leaderboard?: ILeaderboardOptions;
 
   readonly types: number;
   readonly minObj: number;
@@ -46,8 +51,9 @@ export class Server extends http.Server {
     // This is already too much
     maxPayload: 16 * 1024,
   });
+  private readonly leaderboard: Leaderboard;
   private readonly pow: Verifier;
-  private readonly pool: Set<Player> = new Set();
+  private readonly pool: Map<string, Player> = new Map();
   private readonly options: IDefiniteServerOptions;
   private activeGames: number = 0;
 
@@ -67,6 +73,8 @@ export class Server extends http.Server {
       total: 10,
       maxRounds: 5,
     }, options);
+
+    this.leaderboard = new Leaderboard(this.options.leaderboard);
 
     this.pow = new Verifier({
       size: 1024,
@@ -102,15 +110,19 @@ export class Server extends http.Server {
     }
 
     if (!this.pow.check(challenge)) {
-      p.close();
-      debug('Invalid proof-of-work challenge');
+      p.close(new Error('Invalid proof of work'));
+      return;
+    }
+
+    if (this.pool.has(p.hash)) {
+      p.close(new Error('duplicate hash'));
       return;
     }
 
     debug('Challenge passed!');
-    this.pool.add(p);
+    this.pool.set(p.hash, p);
     p.once('close', () => {
-      this.pool.delete(p);
+      this.pool.delete(p.hash);
     });
 
     this.maybePlay();
@@ -134,7 +146,7 @@ export class Server extends http.Server {
 
       this.playGame().then((result: IGameResult) => {
         this.activeGames--;
-        console.log(result);
+        this.leaderboard.add(result);
 
         this.maybePlay();
       }).catch((e) => {
@@ -149,7 +161,7 @@ export class Server extends http.Server {
   private async playGame(): Promise<IGameResult> {
     // Pick two players
     // TODO(indutny): take in account number of games played?
-    const players = Array.from(this.pool);
+    const players = Array.from(this.pool.values());
     const first = (Math.random() * players.length) | 0;
 
     let second: number;

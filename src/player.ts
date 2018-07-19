@@ -85,7 +85,11 @@ export class Player extends EventEmitter {
     return Buffer.from(value.challenge!, 'hex');
   }
 
-  public close() {
+  public close(err?: Error) {
+    if (err) {
+      return this.error(err);
+    }
+
     debug('Closing client');
     this.ws.terminate();
     this.emit('close');

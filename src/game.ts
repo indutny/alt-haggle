@@ -29,6 +29,9 @@ export interface IGameResult {
   readonly accept: boolean;
   readonly first: number;
   readonly second: number;
+
+  readonly firstHash: string;
+  readonly secondHash: string;
 }
 
 export class Game {
@@ -65,6 +68,9 @@ export class Game {
       accept: false,
       first: 0,
       second: 0,
+
+      firstHash: this.first.hash,
+      secondHash: this.second.hash,
     };
 
     let err: Error | undefined = undefined;
@@ -149,6 +155,9 @@ export class Game {
       accept: true,
       first: this.offerValue(first, this.config.valuations.first),
       second: this.offerValue(second, this.config.valuations.second),
+
+      firstHash: this.first.hash,
+      secondHash: this.second.hash,
     };
   }
 }
