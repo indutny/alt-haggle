@@ -32,6 +32,11 @@ Leaderboard (updates every 5 seconds):
 http://hola.darksi.de/v1/standard
 ```
 
+Daily score table (updates every 5 seconds):
+```
+http://hola.darksi.de/v1/daily
+```
+
 #### LICENSE
 
 This software is licensed under the MIT License.
