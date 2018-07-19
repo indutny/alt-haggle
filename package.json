@@ -11,7 +11,10 @@
     "lint": "tslint -c tslint.json src/**/*.ts test/**/*.ts",
     "fix-lint": "npm run lint -- --fix",
     "mocha": "mocha --timeout=10000 -r ts-node/register/type-check --reporter spec test/*-test.ts",
-    "test": "npm run mocha && npm run lint"
+    "test": "npm run mocha && npm run lint",
+
+    "client": "ts-node ./bin/client.ts",
+    "server": "ts-node ./bin/client.ts"
   },
   "keywords": [],
   "author": "Fedor Indutny <fedor@indutny.com> (http://darksi.de/)",
