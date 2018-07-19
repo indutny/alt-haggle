@@ -46,7 +46,7 @@ interface IDefiniteServerOptions {
 export class Server extends http.Server {
   private readonly generator: Generator;
   private readonly ws: ws.Server = new ws.Server({
-    server: this,
+    noServer: true,
 
     // This is already too much
     maxPayload: 16 * 1024,
@@ -87,13 +87,21 @@ export class Server extends http.Server {
     this.generator = new Generator(this.options.types, this.options.minObj,
       this.options.maxObj, this.options.total, this.options.maxRounds);
 
-    this.ws.on('connection', (socket) => this.onConnection(socket));
-
     this.on('request', (req, res) => {
       this.onRequest(req, res).catch((error) => {
         res.writeHead(500);
         res.end(JSON.stringify({ error }));
       });
+    });
+
+    this.on('upgrade', (req, socket, head) => {
+      if (req.url === '/v1/standard') {
+        this.ws.handleUpgrade(req, socket, head, (ws) => {
+          this.onConnection(ws);
+        });
+      } else {
+        socket.end();
+      }
     });
   }
 
@@ -135,7 +143,7 @@ export class Server extends http.Server {
 
   private async onRequest(req: http.IncomingMessage,
                           res: http.ServerResponse) {
-    if (req.method === 'GET' && req.url === '/leaderboard') {
+    if (req.method === 'GET' && req.url === '/v1/standard') {
       const results = await this.leaderboard.getResults();
       res.writeHead(200, {
         'content-type': 'application/json',

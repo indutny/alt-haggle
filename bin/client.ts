@@ -6,7 +6,7 @@ import { Client } from '../src/client';
 
 const argv = yargs
   .option('address', {
-    default: 'ws://localhost:8000',
+    default: 'ws://localhost:8000/v1/standard',
   })
   .option('name', {
     alias: 'n',
