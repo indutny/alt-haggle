@@ -1,6 +1,7 @@
 #!/usr/bin/env npx ts-node
 import * as yargs from 'yargs';
 import * as path from 'path';
+import * as crypto from 'crypto';
 
 import { Client } from '../src/client';
 
@@ -19,6 +20,9 @@ const argv = yargs
 
 // Unsafe, but who cares?
 const agent = require(path.resolve(argv.script));
+
+console.log('Your hash is "%s"',
+    crypto.createHash('sha256').update(argv.name).digest('hex'));
 
 const client = new Client({
   address: argv.address as string,
