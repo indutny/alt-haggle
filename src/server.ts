@@ -46,6 +46,7 @@ interface IDefiniteServerOptions {
 export class Server extends http.Server {
   private readonly generator: Generator;
   private readonly ws: ws.Server = new ws.Server({
+    perMessageDeflate: true,
     noServer: true,
 
     // This is already too much
