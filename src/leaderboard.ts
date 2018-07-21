@@ -172,7 +172,7 @@ export class Leaderboard {
       entry.hashes.forEach((hash, index) => {
         add({
           hash,
-          opponent: entry.hashes[entry.hashes.length - index],
+          opponent: entry.hashes[entry.hashes.length - index - 1],
           score: entry.scores[index],
           agreements,
           sessions,
