@@ -42,7 +42,7 @@ export interface IAggregatedTableEntry {
   readonly meanAgreedScore: number;
   readonly meanAcceptance: number;
   readonly meanSessions: number;
-  readonly opponents: number;
+  readonly opponents: ReadonlyArray<string>;
 }
 
 export type AggregatedTable = ReadonlyArray<IAggregatedTableEntry>;
@@ -206,7 +206,7 @@ export class Leaderboard {
         meanAgreedScore,
         meanAcceptance: acceptance,
         meanSessions: sessions,
-        opponents: submap.size,
+        opponents: Array.from(submap.keys()),
       });
     });
 
