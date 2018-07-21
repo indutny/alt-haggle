@@ -196,7 +196,7 @@ export class Leaderboard {
         acceptance += single.agreements / single.sessions;
         sessions += single.sessions;
 
-        opponents[single.opponent] = meanScore;
+        opponents[single.opponent] = single.score / single.sessions;
       }
 
       meanScore /= submap.size;
