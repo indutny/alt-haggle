@@ -20,6 +20,7 @@ export interface IServerOptions {
   readonly parallelGames?: number;
 
   readonly leaderboard?: ILeaderboardOptions;
+  readonly cacheTimeout?: number;
 
   readonly types?: number;
   readonly minObj?: number;
@@ -35,6 +36,7 @@ interface IDefiniteServerOptions {
   readonly parallelGames: number;
 
   readonly leaderboard?: ILeaderboardOptions;
+  readonly cacheTimeout: number;
 
   readonly types: number;
   readonly minObj: number;
@@ -57,6 +59,7 @@ export class Server extends http.Server {
   private readonly pool: Map<string, Player> = new Map();
   private readonly options: IDefiniteServerOptions;
   private activeGames: number = 0;
+  private resultCache: Map<string, Promise<any> | any> = new Map();
 
   constructor(options: IServerOptions = {}) {
     super();
@@ -67,6 +70,8 @@ export class Server extends http.Server {
       initTimeout: 120000, // 2 min
       timeout: 30000, // 30 seconds
       parallelGames: 1000,
+
+      cacheTimeout: 1000, // 1 second
 
       types: 3,
       minObj: 1,
@@ -142,28 +147,62 @@ export class Server extends http.Server {
     this.maybePlay();
   }
 
-  private async onRequest(req: http.IncomingMessage,
-                          res: http.ServerResponse) {
-    // TODO(indutny): reduce amount copy-paste
-    if (req.method === 'GET' && req.url === '/v1/standard') {
-      const results = await this.leaderboard.getResults();
-      res.writeHead(200, {
-        'content-type': 'application/json',
-      });
-      res.end(JSON.stringify(results, null, 2));
-      return;
-    } else if (req.method === 'GET' && req.url === '/v1/daily') {
-      const results = await this.leaderboard.getDailyTable();
-      res.writeHead(200, {
-        'content-type': 'application/json',
-      });
-      res.end(JSON.stringify(results, null, 2));
+  private async onRequest(req: http.IncomingMessage, res: http.ServerResponse) {
+    if (req.method === 'GET') {
+      await this.handleGET(req, res);
       return;
     }
 
-    // TODO(indutny): leaderboard!
-    res.writeHead(404);
-    res.end('Not found');
+    res.writeHead(400);
+    res.end('Invalid method');
+  }
+
+  private async handleGET(req: http.IncomingMessage, res: http.ServerResponse) {
+    let key: string;
+    let fetch: () => Promise<any> | any;
+    if (req.url === '/v1/standard') {
+      key = 'raw';
+      fetch = () => this.leaderboard.getRaw();
+    } else if (req.url === '/v1/daily') {
+      key = 'daily';
+      fetch = () => this.leaderboard.getAggregated(24 * 3600 * 1000);
+    } else if (req.url === '/v1/6h') {
+      key = '6h';
+      fetch = () => this.leaderboard.getAggregated(6 * 3600 * 1000);
+    } else if (req.url === '/v1/hourly') {
+      key = 'hourly';
+      fetch = () => this.leaderboard.getAggregated(3600 * 1000);
+    } else {
+      res.writeHead(404);
+      res.end('Not found');
+      return;
+    }
+
+    const json = await this.getCachedStat(key, fetch);
+
+    res.writeHead(200, {
+      'content-type': 'application/json',
+    });
+    res.end(JSON.stringify(json, null, 2));
+  }
+
+  private async getCachedStat(key: string,
+                              fetch: () => Promise<any> | any): Promise<any> {
+    if (this.resultCache.has(key)) {
+      return await this.resultCache.get(key)!;
+    }
+
+    const promise = fetch();
+    this.resultCache.set(key, promise);
+
+    const res = await promise;
+    this.resultCache.set(key, res);
+
+    setTimeout(() => {
+      this.resultCache.delete(key);
+    }, this.options.cacheTimeout);
+
+    return res;
   }
 
   private maybePlay() {

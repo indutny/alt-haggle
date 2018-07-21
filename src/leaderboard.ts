@@ -9,16 +9,14 @@ const debug = debugAPI('alt-haggle:leaderboard');
 export interface ILeaderboardOptions {
   readonly url?: string;
   readonly prefix?: string;
-  readonly cacheTimeout?: number;
 }
 
 interface IDefiniteLeaderboardOptions {
   readonly url: string;
   readonly prefix: string;
-  readonly cacheTimeout: number;
 }
 
-export interface ILeaderboardSingleResult {
+export interface IRawResultSingle {
   readonly timestamp: Date;
   readonly hashes: string[];
   readonly scores: number[];
@@ -28,9 +26,9 @@ export interface ILeaderboardSingleResult {
   readonly sessions: number;
 }
 
-export type LeaderboardResults = ReadonlyArray<ILeaderboardSingleResult>;
+export type RawResults = ReadonlyArray<IRawResultSingle>;
 
-interface IDailySingle {
+interface IAggregatedSingle {
   readonly hash: string;
   readonly opponent: string;
   readonly score: number;
@@ -38,28 +36,25 @@ interface IDailySingle {
   readonly sessions: number;
 }
 
-export interface IDailyTableEntry {
+export interface IAggregatedTableEntry {
   readonly hash: string;
   readonly meanScore: number;
   readonly meanAgreedScore: number;
   readonly meanAcceptance: number;
   readonly meanSessions: number;
+  readonly opponents: number;
 }
 
-export type DailyTable = ReadonlyArray<IDailyTableEntry>;
+export type AggregatedTable = ReadonlyArray<IAggregatedTableEntry>;
 
 export class Leaderboard {
   private readonly options: IDefiniteLeaderboardOptions;
   private readonly db: redis.RedisClient;
-  private cachedResults
-    : LeaderboardResults | Promise<LeaderboardResults> | undefined = undefined;
-  private cachedDaily: DailyTable | Promise<DailyTable> | undefined = undefined;
 
   constructor(options: ILeaderboardOptions = {}) {
     this.options = Object.assign({
       url: 'redis://localhost:6379',
       prefix: 'ah/',
-      cacheTimeout: 5000, // 5 secs
     }, options);
 
     this.db = redis.createClient(this.options.url);
@@ -93,48 +88,11 @@ export class Leaderboard {
     this.db.hincrby(this.options.prefix + key, 'score1', results[1].score);
   }
 
-  // TODO(indutny): use decorators
-  public async getResults(): Promise<LeaderboardResults> {
-    if (this.cachedResults) {
-      return await this.cachedResults;
-    }
-
-    const promise = this.fetchResults();
-    this.cachedResults = promise;
-
-    const res = await promise;
-    this.cachedResults = res;
-
-    setTimeout(() => {
-      this.cachedResults = undefined;
-    }, this.options.cacheTimeout);
-
-    return res;
-  }
-
-  public async getDailyTable(): Promise<DailyTable> {
-    if (this.cachedDaily) {
-      return await this.cachedDaily;
-    }
-
-    const promise = this.fetchDailyTable();
-    this.cachedDaily = promise;
-
-    const res = await promise;
-    this.cachedDaily = res;
-
-    setTimeout(() => {
-      this.cachedDaily = undefined;
-    }, this.options.cacheTimeout);
-
-    return res;
-  }
-
-  private async fetchResults(): Promise<LeaderboardResults> {
+  public async getRaw(): Promise<RawResults> {
     const prefix = this.options.prefix + 's/';
     const keys = await promisify(this.db.keys).call(this.db, prefix + '*');
 
-    const res: ILeaderboardSingleResult[] = [];
+    const res: IRawResultSingle[] = [];
 
     // TODO(indutny): use hgetall
     await Promise.all(keys.map(async (key: string) => {
@@ -142,15 +100,16 @@ export class Leaderboard {
       const timestamp = new Date(parseInt(parts[0], 10));
       const hashes = parts.slice(1);
 
-      const hget = promisify(this.db.hget);
+      const hgetall = promisify(this.db.hgetall);
+      const hash = await hgetall.call(this.db, key);
 
-      const scores = [
-        await hget.call(this.db, key, 'score0') | 0,
-        await hget.call(this.db, key, 'score1') | 0,
+      const scores: number[] = [
+        hash.score0! | 0,
+        hash.score1! | 0,
       ];
 
-      const sessions = await hget.call(this.db, key, 'sessions') | 0;
-      const agreements = await hget.call(this.db, key, 'agreements') | 0;
+      const sessions = hash.sessions | 0;
+      const agreements = hash.agreements | 0;
 
       res.push({
         timestamp,
@@ -171,19 +130,19 @@ export class Leaderboard {
     return res;
   }
 
-  private async fetchDailyTable(): Promise<DailyTable> {
-    const results = await this.getResults();
+  public async getAggregated(timeSpan: number): Promise<AggregatedTable> {
+    const results = await this.getRaw();
 
-    const yesterday = Date.now() - 24 * 3600 * 1000;
+    const yesterday = Date.now() - timeSpan;
 
     const dailyResults = results.filter((entry) => {
       return entry.timestamp.getTime() >= yesterday;
     });
 
-    const map: Map<string, Map<string, IDailySingle>> = new Map();
+    const map: Map<string, Map<string, IAggregatedSingle>> = new Map();
 
-    const add = (interim: IDailySingle) => {
-      let submap: Map<string, IDailySingle>;
+    const add = (interim: IAggregatedSingle) => {
+      let submap: Map<string, IAggregatedSingle>;
       if (map.has(interim.hash)) {
         submap = map.get(interim.hash)!;
       } else {
@@ -191,7 +150,7 @@ export class Leaderboard {
         map.set(interim.hash, submap);
       }
 
-      let entry: IDailySingle;
+      let entry: IAggregatedSingle;
       if (submap.has(interim.opponent)) {
         entry = submap.get(interim.opponent)!;
         submap.set(interim.opponent, {
@@ -221,7 +180,7 @@ export class Leaderboard {
       });
     }
 
-    const res: IDailyTableEntry[] = [];
+    const res: IAggregatedTableEntry[] = [];
 
     map.forEach((submap, hash) => {
       let meanScore = 0;
@@ -247,6 +206,7 @@ export class Leaderboard {
         meanAgreedScore,
         meanAcceptance: acceptance,
         meanSessions: sessions,
+        opponents: submap.size,
       });
     });
 
