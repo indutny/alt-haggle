@@ -206,7 +206,7 @@ export class Server extends http.Server {
   }
 
   private maybePlay() {
-    const maxGames = this.options.parallelGames / this.pool.size;
+    const maxGames = 2 * this.options.parallelGames / this.pool.size;
     const players = Array.from(this.pool.values()).filter((player) => {
       return player.activeGames <= maxGames;
     });

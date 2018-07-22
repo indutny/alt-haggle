@@ -105,6 +105,8 @@ export class Player extends EventEmitter {
   }
 
   public async start(game: string, config: IConfig) {
+    this.privActiveGames++;
+
     debug('starting game %s', game);
     const raw = await this.send({ kind: 'start', game, config });
     const { error, value } = Joi.validate(raw, schema.StartResponse);
@@ -114,10 +116,11 @@ export class Player extends EventEmitter {
     }
 
     debug('started game %s', game);
-    this.privActiveGames++;
   }
 
   public async end(game: string, result: IOpponentResult) {
+    this.privActiveGames--;
+
     debug('ending game %s', game);
     const raw = await this.send({ kind: 'end', game, result });
     const { error, value } = Joi.validate(raw, schema.EndResponse);
@@ -127,7 +130,6 @@ export class Player extends EventEmitter {
     }
 
     debug('ended game %s', game);
-    this.privActiveGames--;
   }
 
   public async step(game: string, offer?: Offer): Promise<Offer | undefined> {
