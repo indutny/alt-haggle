@@ -33,6 +33,7 @@ export class Player extends EventEmitter {
   private readonly requests: RequestMap = new Map();
   private privName: string | undefined;
   private privHash: string | undefined;
+  private privActiveGames: number = 0;
 
   constructor(private readonly ws: ws,
               private readonly options: IPlayerOptions) {
@@ -64,6 +65,10 @@ export class Player extends EventEmitter {
 
     this.privHash = crypto.createHash('sha256').update(this.name).digest('hex');
     return this.privHash;
+  }
+
+  public get activeGames(): number {
+    return this.privActiveGames;
   }
 
   public async init(): Promise<Buffer> {
@@ -109,6 +114,7 @@ export class Player extends EventEmitter {
     }
 
     debug('started game %s', game);
+    this.privActiveGames++;
   }
 
   public async end(game: string, result: IOpponentResult) {
@@ -121,6 +127,7 @@ export class Player extends EventEmitter {
     }
 
     debug('ended game %s', game);
+    this.privActiveGames--;
   }
 
   public async step(game: string, offer?: Offer): Promise<Offer | undefined> {

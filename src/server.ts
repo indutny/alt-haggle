@@ -206,8 +206,13 @@ export class Server extends http.Server {
   }
 
   private maybePlay() {
+    const maxGames = this.options.parallelGames / this.pool.size;
+    const players = Array.from(this.pool.values()).filter((player) => {
+      return player.activeGames <= maxGames;
+    });
+
     // Not enough players yet
-    if (this.pool.size < 2) {
+    if (players.length < 2) {
       return;
     }
 
@@ -215,7 +220,7 @@ export class Server extends http.Server {
     while (this.activeGames < this.options.parallelGames) {
       this.activeGames++;
 
-      this.playGame().then((result: IGameResult) => {
+      this.playGame(players).then((result: IGameResult) => {
         this.activeGames--;
         this.leaderboard.add(result);
 
@@ -229,10 +234,9 @@ export class Server extends http.Server {
     }
   }
 
-  private async playGame(): Promise<IGameResult> {
+  private async playGame(players: ReadonlyArray<Player>): Promise<IGameResult> {
     // Pick two players
     // TODO(indutny): take in account number of games played?
-    const players = Array.from(this.pool.values());
     const first = (Math.random() * players.length) | 0;
 
     let second: number;
