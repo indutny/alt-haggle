@@ -72,7 +72,9 @@ export class Player extends EventEmitter {
     const tag = match[2];
 
     this.privHash = crypto.createHash('sha256').update(priv).digest('hex');
-    this.privHash += `-${tag}`;
+    if (tag) {
+      this.privHash += `-${tag}`;
+    }
     return this.privHash;
   }
 
