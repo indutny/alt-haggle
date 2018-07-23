@@ -64,6 +64,9 @@ export class Player extends EventEmitter {
     }
 
     const match = this.name.match(/^(.*)(?:#(.*))?$/);
+    if (match === null) {
+      throw new Error('Unexpected');
+    }
 
     const priv = match[1];
     const tag = match[2];
