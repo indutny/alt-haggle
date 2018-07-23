@@ -42,7 +42,7 @@ export interface IAggregatedTableEntry {
   readonly meanAgreedScore: number;
   readonly meanAcceptance: number;
   readonly meanSessions: number;
-  readonly opponents: { readonly [key: string]: number };
+  readonly opponents: ReadonlyArray<[ string, number ]>;
 }
 
 export type AggregatedTable = ReadonlyArray<IAggregatedTableEntry>;
@@ -188,7 +188,7 @@ export class Leaderboard {
       let acceptance = 0;
       let sessions = 0;
 
-      const opponents: { [key: string]: number } = {};
+      const opponents: Array<[string, number]> = [];
 
       for (const single of submap.values()) {
         meanScore += single.score / single.sessions;
@@ -196,8 +196,12 @@ export class Leaderboard {
         acceptance += single.agreements / single.sessions;
         sessions += single.sessions;
 
-        opponents[single.opponent] = single.score / single.sessions;
+        opponents.push([ single.opponent, single.score / single.sessions ]);
       }
+
+      opponents.sort((a, b) => {
+        return b[1] - a[1];
+      });
 
       meanScore /= submap.size;
       meanAgreedScore /= submap.size;
