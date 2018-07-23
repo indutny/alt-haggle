@@ -14,7 +14,7 @@ To start client run:
 ```bash
 npm install
 while true; do npm run client -- --address http://hola.darksi.de/v1/standard \
-  --name your@email.com:random_static_id \
+  --name your@email.com:random_string#public-tag \
   --script /path/to/script; done
 ```
 _(NOTE: there're no logs on the client yet, but PRs are welcome!)_
