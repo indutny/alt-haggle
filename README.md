@@ -13,6 +13,11 @@ Alternative [haggle.js][0] server.
 To start client run:
 ```bash
 npm install
+
+# Generate random string once (this is your user id)
+node -pe "crypto.randomBytes(8).toString('hex')"
+
+# Use that random string and a public tag below
 while true; do npm run client -- --address http://hola.darksi.de/v1/standard \
   --name your@email.com:random_string#public-tag \
   --script /path/to/script; done
