@@ -63,7 +63,13 @@ export class Player extends EventEmitter {
       return this.privHash;
     }
 
-    this.privHash = crypto.createHash('sha256').update(this.name).digest('hex');
+    const match = this.name.match(/^(.*)(?:#(.*))?$/);
+
+    const priv = match[1];
+    const tag = match[2];
+
+    this.privHash = crypto.createHash('sha256').update(priv).digest('hex');
+    this.privHash += `-${tag}`;
     return this.privHash;
   }
 
