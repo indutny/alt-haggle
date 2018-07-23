@@ -1,4 +1,3 @@
-import * as crypto from 'crypto';
 import * as debugAPI from 'debug';
 import { EventEmitter } from 'events';
 import * as ws from 'ws';
@@ -7,6 +6,7 @@ import { Buffer } from 'buffer';
 
 import { Offer, IConfig, IOpponentResult } from './game';
 import * as schema from './schema';
+import { getPlayerHash } from './utils';
 
 const debug = debugAPI('alt-haggle:player');
 
@@ -63,18 +63,7 @@ export class Player extends EventEmitter {
       return this.privHash;
     }
 
-    const match = this.name.match(/^(.*)(?:#(.*))?$/);
-    if (match === null) {
-      throw new Error('Unexpected');
-    }
-
-    const priv = match[1];
-    const tag = match[2];
-
-    this.privHash = crypto.createHash('sha256').update(priv).digest('hex');
-    if (tag) {
-      this.privHash += `-${tag}`;
-    }
+    this.privHash = getPlayerHash(this.name);
     return this.privHash;
   }
 

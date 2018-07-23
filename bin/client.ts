@@ -4,6 +4,7 @@ import * as path from 'path';
 import * as crypto from 'crypto';
 
 import { Client } from '../src/client';
+import { getPlayerHash } from '../src/utils';
 
 const argv = yargs
   .option('address', {
@@ -21,8 +22,7 @@ const argv = yargs
 // Unsafe, but who cares?
 const agent = require(path.resolve(argv.script));
 
-console.log('Your hash is "%s"',
-    crypto.createHash('sha256').update(argv.name).digest('hex'));
+console.log('Your hash is "%s"', getPlayerHash(argv.name));
 
 const client = new Client({
   address: argv.address as string,
