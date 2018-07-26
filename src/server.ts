@@ -15,6 +15,8 @@ const POW_PREFIX = Buffer.from('alt-haggle');
 
 export interface IServerOptions {
   readonly complexity?: number;
+  readonly powInterval?: number;
+
   readonly initTimeout?: number;
   readonly timeout?: number;
   readonly parallelGames?: number;
@@ -31,6 +33,8 @@ export interface IServerOptions {
 
 interface IDefiniteServerOptions {
   readonly complexity: number;
+  readonly powInterval: number;
+
   readonly initTimeout: number;
   readonly timeout: number;
   readonly parallelGames: number;
@@ -66,6 +70,7 @@ export class Server extends http.Server {
 
     this.options = Object.assign({
       complexity: 19, // proof-of-work
+      powInterval: 300000,
 
       initTimeout: 120000, // 2 min
       timeout: 30000, // 30 seconds
@@ -83,11 +88,15 @@ export class Server extends http.Server {
     this.leaderboard = new Leaderboard(this.options.leaderboard);
 
     this.pow = new Verifier({
-      size: 1024,
-      n: 16,
+      size: 4 * 1024 * 1024,
+      n: 23,
       complexity: this.options.complexity,
       prefix: POW_PREFIX,
     });
+
+    setInterval(() => {
+      this.pow.reset();
+    }, this.options.powInterval);
 
     // TODO(indutny): just pass the object
     this.generator = new Generator(this.options.types, this.options.minObj,
