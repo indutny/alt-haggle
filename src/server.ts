@@ -1,6 +1,8 @@
 import * as ws from 'ws';
 import * as debugAPI from 'debug';
 import * as http from 'http';
+import { parse as parseURL } from 'url';
+
 import { Verifier } from 'proof-of-work';
 import { Buffer } from 'buffer';
 
@@ -105,7 +107,7 @@ export class Server extends http.Server {
     this.on('request', (req, res) => {
       this.onRequest(req, res).catch((error) => {
         res.writeHead(500);
-        res.end(JSON.stringify({ error }));
+        res.end(JSON.stringify({ error: error.stack }));
       });
     });
 
@@ -169,18 +171,40 @@ export class Server extends http.Server {
   private async handleGET(req: http.IncomingMessage, res: http.ServerResponse) {
     let key: string;
     let fetch: () => Promise<any> | any;
-    if (req.url === '/v1/standard') {
+    const { pathname, query } = parseURL(req.url!, true);
+    if (pathname === '/v1/standard') {
       key = 'raw';
       fetch = () => this.leaderboard.getRaw();
-    } else if (req.url === '/v1/daily') {
-      key = 'daily';
-      fetch = () => this.leaderboard.getAggregated(24 * 3600 * 1000);
-    } else if (req.url === '/v1/6h') {
-      key = '6h';
-      fetch = () => this.leaderboard.getAggregated(6 * 3600 * 1000);
-    } else if (req.url === '/v1/hourly') {
-      key = 'hourly';
-      fetch = () => this.leaderboard.getAggregated(3600 * 1000);
+    } else if (pathname === '/v1/daily' || pathname === '/v1/6h' ||
+               pathname === '/v1/hourly') {
+      let timeSpan: number;
+      if (pathname === '/v1/daily') {
+        timeSpan = 24 * 3600 * 1000;
+      } else if (pathname === '/v1/6h') {
+        timeSpan = 6 * 3600 * 1000;
+      } else if (pathname === '/v1/hourly') {
+        timeSpan = 3600 * 1000;
+      } else {
+        throw new Error('Unexpected');
+      }
+      key = 'aggr-' + timeSpan + '-' + query.compact ? 'compact' : 'full';
+      fetch = async () => {
+        const res = await this.leaderboard.getAggregated(timeSpan);
+
+        if (query.compact) {
+          return res.map((entry) => {
+            return {
+              hash: entry.hash,
+              meanScore: entry.meanScore,
+              meanAgreedScore: entry.meanAgreedScore,
+              meanAcceptance: entry.meanAcceptance,
+              meanSessions: entry.meanSessions,
+            };
+          });
+        }
+
+        return res;
+      };
     } else {
       res.writeHead(404);
       res.end('Not found');
