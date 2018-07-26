@@ -10,6 +10,7 @@ import { Generator } from './generator';
 import { Player } from './player';
 import { Game, IGameResult } from './game';
 import { Leaderboard, ILeaderboardOptions } from './leaderboard';
+import { CachedStat } from './cached-stat';
 
 const debug = debugAPI('alt-haggle:server');
 
@@ -65,7 +66,8 @@ export class Server extends http.Server {
   private readonly pool: Map<string, Player> = new Map();
   private readonly options: IDefiniteServerOptions;
   private activeGames: number = 0;
-  private resultCache: Map<string, Promise<any> | any> = new Map();
+  private resultCache: Map<string, Promise<CachedStat> | CachedStat> =
+      new Map();
 
   constructor(options: IServerOptions = {}) {
     super();
@@ -211,21 +213,35 @@ export class Server extends http.Server {
       return;
     }
 
-    const json = await this.getCachedStat(key, fetch);
+    const cached = await this.getCachedStat(key, fetch);
 
-    res.writeHead(200, {
+    const encoding = req.headers['accept-encoding'] || '';
+
+    const headers: { [key: string]: string | number } = {
       'content-type': 'application/json',
-    });
-    res.end(JSON.stringify(json, null, 2));
+    };
+
+    let body: Buffer;
+    if (encoding.includes('deflate')) {
+      headers['content-encoding'] = 'deflate';
+      body = cached.deflate;
+    } else {
+      body = cached.raw;
+    }
+
+    res.writeHead(200, headers);
+    res.end(body);
   }
 
-  private async getCachedStat(key: string,
-                              fetch: () => Promise<any> | any): Promise<any> {
+  private async getCachedStat(key: string, fetch: () => Promise<any> | any)
+      : Promise<CachedStat> {
     if (this.resultCache.has(key)) {
       return await this.resultCache.get(key)!;
     }
 
-    const promise = fetch();
+    const promise = fetch().then((obj: any) => {
+      return new CachedStat(Buffer.from(JSON.stringify(obj, null, 2)));
+    });
     this.resultCache.set(key, promise);
 
     const res = await promise;
