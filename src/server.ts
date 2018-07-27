@@ -189,7 +189,7 @@ export class Server extends http.Server {
       } else {
         throw new Error('Unexpected');
       }
-      key = 'aggr-' + timeSpan + '-' + query.compact ? 'compact' : 'full';
+      key = 'aggr-' + timeSpan + '-' + (query.compact ? 'compact' : 'full');
       fetch = async () => {
         const res = await this.leaderboard.getAggregated(timeSpan);
 
