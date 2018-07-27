@@ -9,11 +9,15 @@ const debug = debugAPI('alt-haggle:leaderboard');
 export interface ILeaderboardOptions {
   readonly url?: string;
   readonly prefix?: string;
+  readonly expire?: number;
+  readonly period?: number;
 }
 
 interface IDefiniteLeaderboardOptions {
   readonly url: string;
   readonly prefix: string;
+  readonly expire: number;
+  readonly period: number;
 }
 
 export interface IRawResultSingle {
@@ -55,6 +59,8 @@ export class Leaderboard {
     this.options = Object.assign({
       url: 'redis://localhost:6379',
       prefix: 'ah/',
+      expire: 3600 * 24 * 7, // 7 days before expiration
+      period: 1000 * 60 * 15, // 15 minutes
     }, options);
 
     this.db = redis.createClient(this.options.url);
@@ -75,17 +81,21 @@ export class Leaderboard {
       return a.hash > b.hash ? 1 : a.hash < b.hash ? -1 : 0;
     });
 
-    // Every hour gets different key
-    const ts = Math.floor(Date.now() / (3600 * 1000)) * 3600 * 1000;
-    const key = 's/' + ts + ':' + results[0].hash + ':' + results[1].hash;
+    const ts = this.timestampToKey(Date.now());
+    const key = this.options.prefix +
+      's/' + ts + ':' + results[0].hash + ':' + results[1].hash;
 
-    this.db.hincrby(this.options.prefix + key, 'sessions', 1);
+    const promises: Promise<any>[] = [];
+
+    this.db.hincrby(key, 'sessions', 1);
     if (result.accept) {
-      this.db.hincrby(this.options.prefix + key, 'agreements', 1);
+      this.db.hincrby(key, 'agreements', 1);
     }
 
-    this.db.hincrby(this.options.prefix + key, 'score0', results[0].score);
-    this.db.hincrby(this.options.prefix + key, 'score1', results[1].score);
+    this.db.hincrby(key, 'score0', results[0].score);
+    this.db.hincrby(key, 'score1', results[1].score);
+
+    this.db.expire(key, this.options.expire);
   }
 
   public async getRaw(): Promise<RawResults> {
@@ -94,7 +104,6 @@ export class Leaderboard {
 
     const res: IRawResultSingle[] = [];
 
-    // TODO(indutny): use hgetall
     await Promise.all(keys.map(async (key: string) => {
       const parts = key.slice(prefix.length).split(':');
       const timestamp = new Date(parseInt(parts[0], 10));
@@ -222,6 +231,17 @@ export class Leaderboard {
       return b.meanScore - a.meanScore;
     });
 
+    return res;
+  }
+
+  private timestampToKey(timestamp: number): string {
+    const period = this.options.period;
+    const ts = Math.floor(timestamp / period) * period;
+
+    let res = ts.toString();
+    while (res.length < 16) {
+      res = '0' + res;
+    }
     return res;
   }
 }

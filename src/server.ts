@@ -178,7 +178,7 @@ export class Server extends http.Server {
       key = 'raw';
       fetch = () => this.leaderboard.getRaw();
     } else if (pathname === '/v1/daily' || pathname === '/v1/6h' ||
-               pathname === '/v1/hourly') {
+               pathname === '/v1/hourly' || pathname === '/v1/15m') {
       let timeSpan: number;
       if (pathname === '/v1/daily') {
         timeSpan = 24 * 3600 * 1000;
@@ -186,6 +186,8 @@ export class Server extends http.Server {
         timeSpan = 6 * 3600 * 1000;
       } else if (pathname === '/v1/hourly') {
         timeSpan = 3600 * 1000;
+      } else if (pathname === '/v1/15m') {
+        timeSpan = 15 * 60 * 1000;
       } else {
         throw new Error('Unexpected');
       }
