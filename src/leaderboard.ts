@@ -142,10 +142,10 @@ export class Leaderboard {
   public async getAggregated(timeSpan: number): Promise<AggregatedTable> {
     const results = await this.getRaw();
 
-    const yesterday = Date.now() - timeSpan;
+    const startTime = Date.now() - timeSpan;
 
-    const dailyResults = results.filter((entry) => {
-      return entry.timestamp.getTime() >= yesterday;
+    const filteredResults = results.filter((entry) => {
+      return entry.timestamp.getTime() >= startTime;
     });
 
     const map: Map<string, Map<string, IAggregatedSingle>> = new Map();
@@ -174,7 +174,7 @@ export class Leaderboard {
       }
     };
 
-    for (const entry of dailyResults) {
+    for (const entry of filteredResults) {
       const sessions = entry.sessions;
       const agreements = entry.agreements;
 
