@@ -32,14 +32,24 @@ npm run server
 
 ## Key urls
 
-Leaderboard (updates every 5 seconds):
+Leaderboard (updates every second, 15 minutes granularity):
 ```
-http://hola.darksi.de/v1/standard
+http://hola.darksi.de/v1/standard?compact=1
 ```
 
-Daily score table (updates every 5 seconds):
+Daily score table (updates every second):
 ```
-http://hola.darksi.de/v1/daily
+http://hola.darksi.de/v1/daily?compact=1
+```
+
+Hourly score table (updates every second):
+```
+http://hola.darksi.de/v1/hourly?compact=1
+```
+
+15min score table (updates every second):
+```
+http://hola.darksi.de/v1/15min?compact=1
 ```
 
 #### LICENSE
