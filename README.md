@@ -49,7 +49,7 @@ http://hola.darksi.de/v1/hourly?compact=1
 
 15min score table (updates every second):
 ```
-http://hola.darksi.de/v1/15min?compact=1
+http://hola.darksi.de/v1/15m?compact=1
 ```
 
 #### LICENSE
