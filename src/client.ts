@@ -2,6 +2,7 @@ import * as ws from 'ws';
 import * as debugAPI from 'debug';
 import { Solver } from 'proof-of-work';
 import { Buffer } from 'buffer';
+import { EventEmitter } from 'events';
 
 import { IOpponentResult } from './game';
 
@@ -34,13 +35,16 @@ export interface IAgent {
     : ReadonlyArray<number> | undefined;
 }
 
-export class Client {
+export class Client extends EventEmitter {
   private readonly options: IDefiniteClientOptions;
   private readonly ws: ws;
   private readonly pow: Solver = new Solver();
   private readonly agents: Map<string, IAgent> = new Map();
+  private readonly gameLog: Map<string, any[]> = new Map();
 
   constructor(options: IClientOptions) {
+    super();
+
     this.options = Object.assign({
       address: 'ws://localhost:8000/',
     }, options);
@@ -71,37 +75,50 @@ export class Client {
         name: this.options.name,
         challenge: challenge.toString('hex'),
       });
-    } else if (kind === 'start') {
+      return;
+    }
+
+    let log = this.gameLog.get(payload.game!)!;
+
+    if (kind === 'start') {
       this.reply(msg!, { kind: 'start' });
 
       const config = payload.config!;
 
-      // TODO(indunty): log
       const agent = new this.options.agent(config.isFirst ? 0 : 1,
           config.counts!, config.values!, config.maxRounds!,
           () => {});
       this.agents.set(payload.game!, agent);
+
+      log = [];
+      this.gameLog.set(payload.game!, log);
+      log.push(payload);
     } else if (kind === 'end') {
       this.reply(msg!, { kind: 'end' });
 
-      this.log(payload.result);
+      log.push(payload);
+      this.gameLog.delete(payload.game!);
       this.agents.delete(payload.game!);
+
+      this.emit('game', payload.game!, log);
     } else if (kind === 'step') {
       const agent = this.agents.get(payload.game!)!;
 
+      log.push(payload);
       const offer = agent.offer(payload.offer!);
+      log.push({ kind: 'counter-step', offer });
+
       this.reply(msg!, { kind: 'step', offer });
+    } else {
+      debug('unknown message kind %j', kind);
     }
   }
 
   private reply(req: IRequest, response: any): void {
+    debug('replying with %j', response);
     this.ws.send(JSON.stringify({
       seq: req.seq,
       payload: response
     }));
-  }
-
-  private log(result: IOpponentResult): void {
-    debug(result);
   }
 }

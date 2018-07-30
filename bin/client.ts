@@ -29,3 +29,8 @@ const client = new Client({
   name: argv.name as string,
   agent,
 });
+
+client.on('game', (id: string, events: any[]) => {
+  // Do something useful here
+  // console.log(id, events);
+});
