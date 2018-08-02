@@ -23,7 +23,6 @@ export interface IServerOptions {
   readonly initTimeout?: number;
   readonly timeout?: number;
   readonly parallelGames?: number;
-  readonly rehashEvery?: number;
 
   readonly leaderboard?: ILeaderboardOptions;
   readonly cacheTimeout?: number;
@@ -42,7 +41,6 @@ interface IDefiniteServerOptions {
   readonly initTimeout: number;
   readonly timeout: number;
   readonly parallelGames: number;
-  readonly rehashEvery: number;
 
   readonly leaderboard?: ILeaderboardOptions;
   readonly cacheTimeout: number;
@@ -56,7 +54,6 @@ interface IDefiniteServerOptions {
 
 interface IPlayerWrap {
   readonly player: Player;
-  rehashIn: number;
   activeGames: number;
 }
 
@@ -87,7 +84,6 @@ export class Server extends http.Server {
       initTimeout: 120000, // 2 min
       timeout: 30000, // 30 seconds
       parallelGames: 1000,
-      rehashEvery: 10000, // get new proof-of-work every 1000 games
 
       cacheTimeout: 1000, // 1 second
 
@@ -167,33 +163,10 @@ export class Server extends http.Server {
     debug('Challenge passed!');
     this.pool.set(p.hash, {
       player: p,
-      rehashIn: this.options.rehashEvery,
       activeGames: 0,
     });
 
     this.maybePlay();
-  }
-
-  private async maybeRehash(w: IPlayerWrap) {
-    debug('player %j has %d games before rehash, %d active',
-      w.player.hash, w.rehashIn, w.activeGames);
-
-    w.rehashIn = Math.max(0, w.rehashIn - 1);
-    if (w.rehashIn !== 0) {
-      return;
-    }
-
-    // Remove player from pool to prevent new games
-    this.pool.delete(w.player.hash);
-
-    // Wait for current games to complete
-    if (w.activeGames !== 0) {
-      return;
-    }
-
-    // Rehash
-    debug('player %j rehash', w.player.hash);
-    await this.rehashPlayer(w.player);
   }
 
   private async onRequest(req: http.IncomingMessage, res: http.ServerResponse) {
@@ -348,13 +321,6 @@ export class Server extends http.Server {
       firstPlayer.activeGames--;
       secondPlayer.activeGames--;
     }
-
-    Promise.all([
-      this.maybeRehash(firstPlayer),
-      this.maybeRehash(secondPlayer),
-    ]).catch((e) => {
-      debug('Rehash error', e);
-    });
 
     return res;
   }
