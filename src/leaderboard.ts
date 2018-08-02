@@ -51,6 +51,12 @@ export interface IAggregatedTableEntry {
 
 export type AggregatedTable = ReadonlyArray<IAggregatedTableEntry>;
 
+interface IParsedKey {
+  readonly raw: string;
+  readonly timestamp: Date;
+  readonly hashes: string[];
+}
+
 export class Leaderboard {
   private readonly options: IDefiniteLeaderboardOptions;
   private readonly db: redis.RedisClient;
@@ -98,19 +104,29 @@ export class Leaderboard {
     this.db.expire(key, this.options.expire);
   }
 
-  public async getRaw(): Promise<RawResults> {
+  public async getRaw(timeSpan: number = Infinity): Promise<RawResults> {
     const prefix = this.options.prefix + 's/';
     const keys = await promisify(this.db.keys).call(this.db, prefix + '*');
 
-    const res: IRawResultSingle[] = [];
-
-    await Promise.all(keys.map(async (key: string) => {
+    const parsedKeys: IParsedKey[] = keys.map((key: string) => {
       const parts = key.slice(prefix.length).split(':');
       const timestamp = new Date(parseInt(parts[0], 10));
       const hashes = parts.slice(1);
 
+      return { timestamp, hashes, raw: key };
+    });
+
+    const startTime = Date.now() - timeSpan;
+
+    const filteredKeys = parsedKeys.filter((key) => {
+      return key.timestamp.getTime() >= startTime;
+    });
+
+    const res: IRawResultSingle[] = [];
+
+    await Promise.all(filteredKeys.map(async (key) => {
       const hgetall = promisify(this.db.hgetall);
-      const hash = await hgetall.call(this.db, key);
+      const hash = await hgetall.call(this.db, key.raw);
 
       const scores: number[] = [
         hash.score0! | 0,
@@ -121,8 +137,8 @@ export class Leaderboard {
       const agreements = hash.agreements | 0;
 
       res.push({
-        timestamp,
-        hashes,
+        timestamp: key.timestamp,
+        hashes: key.hashes,
         scores,
         sessions,
         agreements,
@@ -140,13 +156,7 @@ export class Leaderboard {
   }
 
   public async getAggregated(timeSpan: number): Promise<AggregatedTable> {
-    const results = await this.getRaw();
-
-    const startTime = Date.now() - timeSpan;
-
-    const filteredResults = results.filter((entry) => {
-      return entry.timestamp.getTime() >= startTime;
-    });
+    const results = await this.getRaw(timeSpan);
 
     const map: Map<string, Map<string, IAggregatedSingle>> = new Map();
 
@@ -174,7 +184,7 @@ export class Leaderboard {
       }
     };
 
-    for (const entry of filteredResults) {
+    for (const entry of results) {
       const sessions = entry.sessions;
       const agreements = entry.agreements;
 
