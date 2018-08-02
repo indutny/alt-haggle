@@ -81,10 +81,10 @@ export class Server extends http.Server {
     super();
 
     this.options = Object.assign({
-      complexity: 20, // proof-of-work
+      complexity: 19, // proof-of-work
       powInterval: 300000,
 
-      initTimeout: 60000, // 1 min
+      initTimeout: 120000, // 2 min
       timeout: 30000, // 30 seconds
       parallelGames: 1000,
       rehashEvery: 10000, // get new proof-of-work every 1000 games
