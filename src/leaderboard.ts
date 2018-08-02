@@ -1,6 +1,7 @@
 import { promisify } from 'util';
 import * as redis from 'redis';
 import * as debugAPI from 'debug';
+import * as LRU from 'lru-cache';
 
 import { IGameResult } from './game';
 
@@ -11,6 +12,7 @@ export interface ILeaderboardOptions {
   readonly prefix?: string;
   readonly expire?: number;
   readonly period?: number;
+  readonly lruSize?: number;
 }
 
 interface IDefiniteLeaderboardOptions {
@@ -18,6 +20,7 @@ interface IDefiniteLeaderboardOptions {
   readonly prefix: string;
   readonly expire: number;
   readonly period: number;
+  readonly lruSize: number;
 }
 
 export interface IRawResultSingle {
@@ -57,9 +60,17 @@ interface IParsedKey {
   readonly hashes: string[];
 }
 
+interface IRedisObject {
+  readonly sessions: number;
+  readonly agreements: number;
+  readonly score0: number;
+  readonly score1: number;
+}
+
 export class Leaderboard {
   private readonly options: IDefiniteLeaderboardOptions;
   private readonly db: redis.RedisClient;
+  private readonly lru: LRU.Cache<string, IRedisObject>;
 
   constructor(options: ILeaderboardOptions = {}) {
     this.options = Object.assign({
@@ -67,11 +78,17 @@ export class Leaderboard {
       prefix: 'ah/',
       expire: 3600 * 24 * 7, // 7 days before expiration
       period: 1000 * 60 * 15, // 15 minutes
+      lruSize: 100000,
     }, options);
 
     this.db = redis.createClient(this.options.url);
 
     this.db.on('error', (err) => debug('db error %j', err));
+
+    this.lru = new LRU({
+      max: this.options.lruSize,
+      maxAge: Infinity,
+    });
   }
 
   public add(result: IGameResult): void {
@@ -104,6 +121,23 @@ export class Leaderboard {
     this.db.expire(key, this.options.expire);
   }
 
+  private async getRedisObject(key: IParsedKey): Promise<IRedisObject> {
+    const cached = this.lru.get(key.raw);
+    if (cached) {
+      return cached;
+    }
+
+    const hgetall = promisify(this.db.hgetall);
+    const obj: IRedisObject = await hgetall.call(this.db, key.raw);
+
+    // Cache old results, they're not updated anyway
+    const cutoff = Date.now() - this.options.period;
+    if (key.timestamp.getTime() < cutoff) {
+      this.lru.set(key.raw, obj);
+    }
+    return obj;
+  }
+
   public async getRaw(timeSpan: number = Infinity): Promise<RawResults> {
     const prefix = this.options.prefix + 's/';
     const keys = await promisify(this.db.keys).call(this.db, prefix + '*');
@@ -125,16 +159,15 @@ export class Leaderboard {
     const res: IRawResultSingle[] = [];
 
     await Promise.all(filteredKeys.map(async (key) => {
-      const hgetall = promisify(this.db.hgetall);
-      const hash = await hgetall.call(this.db, key.raw);
+      const entry = await this.getRedisObject(key);
 
       const scores: number[] = [
-        hash.score0! | 0,
-        hash.score1! | 0,
+        entry.score0! | 0,
+        entry.score1! | 0,
       ];
 
-      const sessions = hash.sessions | 0;
-      const agreements = hash.agreements | 0;
+      const sessions = entry.sessions | 0;
+      const agreements = entry.agreements | 0;
 
       res.push({
         timestamp: key.timestamp,
