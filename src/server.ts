@@ -23,6 +23,7 @@ export interface IServerOptions {
   readonly initTimeout?: number;
   readonly timeout?: number;
   readonly parallelGames?: number;
+  readonly rehashEvery?: number;
 
   readonly leaderboard?: ILeaderboardOptions;
   readonly cacheTimeout?: number;
@@ -41,6 +42,7 @@ interface IDefiniteServerOptions {
   readonly initTimeout: number;
   readonly timeout: number;
   readonly parallelGames: number;
+  readonly rehashEvery: number;
 
   readonly leaderboard?: ILeaderboardOptions;
   readonly cacheTimeout: number;
@@ -50,6 +52,12 @@ interface IDefiniteServerOptions {
   readonly maxObj: number;
   readonly total: number;
   readonly maxRounds: number;
+}
+
+interface IPlayerWrap {
+  readonly player: Player;
+  rehashIn: number;
+  activeGames: number;
 }
 
 export class Server extends http.Server {
@@ -63,7 +71,7 @@ export class Server extends http.Server {
   });
   private readonly leaderboard: Leaderboard;
   private readonly pow: Verifier;
-  private readonly pool: Map<string, Player> = new Map();
+  private readonly pool: Map<string, IPlayerWrap> = new Map();
   private readonly options: IDefiniteServerOptions;
   private activeGames: number = 0;
   private resultCache: Map<string, Promise<CachedStat> | CachedStat> =
@@ -73,12 +81,13 @@ export class Server extends http.Server {
     super();
 
     this.options = Object.assign({
-      complexity: 19, // proof-of-work
+      complexity: 21, // proof-of-work
       powInterval: 300000,
 
-      initTimeout: 120000, // 2 min
+      initTimeout: 60000, // 1 min
       timeout: 30000, // 30 seconds
       parallelGames: 1000,
+      rehashEvery: 10000, // get new proof-of-work every 1000 games
 
       cacheTimeout: 1000, // 1 second
 
@@ -124,7 +133,7 @@ export class Server extends http.Server {
     });
   }
 
-  private async onConnection(socket: ws) {
+  private onConnection(socket: ws) {
     const p = new Player(socket, {
       complexity: this.options.complexity,
       prefix: POW_PREFIX,
@@ -133,16 +142,20 @@ export class Server extends http.Server {
       timeout: this.options.timeout,
     });
 
-    let challenge: Buffer;
+    this.rehashPlayer(p).then(() => {
+      p.once('close', () => {
+        this.pool.delete(p.hash);
+      });
+    }).catch((e) => {
+      debug('Unexpected error', e);
+    });
+  }
+
+  private async rehashPlayer(p: Player) {
     try {
-      challenge = await p.init();
+      await p.init(this.pow);
     } catch (e) {
       debug('Failed to init player due to error', e);
-      return;
-    }
-
-    if (!this.pow.check(challenge)) {
-      p.close(new Error('Invalid proof of work'));
       return;
     }
 
@@ -152,12 +165,35 @@ export class Server extends http.Server {
     }
 
     debug('Challenge passed!');
-    this.pool.set(p.hash, p);
-    p.once('close', () => {
-      this.pool.delete(p.hash);
+    this.pool.set(p.hash, {
+      player: p,
+      rehashIn: this.options.rehashEvery,
+      activeGames: 0,
     });
 
     this.maybePlay();
+  }
+
+  private async maybeRehash(w: IPlayerWrap) {
+    debug('player %j has %d games before rehash, %d active',
+      w.player.hash, w.rehashIn, w.activeGames);
+
+    w.rehashIn = Math.max(0, w.rehashIn - 1);
+    if (w.rehashIn !== 0) {
+      return;
+    }
+
+    // Remove player from pool to prevent new games
+    this.pool.delete(w.player.hash);
+
+    // Wait for current games to complete
+    if (w.activeGames !== 0) {
+      return;
+    }
+
+    // Rehash
+    debug('player %j rehash', w.player.hash);
+    await this.rehashPlayer(w.player);
   }
 
   private async onRequest(req: http.IncomingMessage, res: http.ServerResponse) {
@@ -282,7 +318,8 @@ export class Server extends http.Server {
     }
   }
 
-  private async playGame(players: ReadonlyArray<Player>): Promise<IGameResult> {
+  private async playGame(players: ReadonlyArray<IPlayerWrap>)
+    : Promise<IGameResult> {
     // Pick two players
     // TODO(indutny): take in account number of games played?
     const first = (Math.random() * players.length) | 0;
@@ -297,8 +334,28 @@ export class Server extends http.Server {
     const firstPlayer = players[first];
     const secondPlayer = players[second];
 
-    const game = new Game(config, firstPlayer, secondPlayer);
+    firstPlayer.activeGames++;
+    secondPlayer.activeGames++;
 
-    return await game.run();
+    const game = new Game(config, firstPlayer.player, secondPlayer.player);
+
+    let res: IGameResult
+    try {
+      res = await game.run();
+    } catch (e) {
+      throw e;
+    } finally {
+      firstPlayer.activeGames--;
+      secondPlayer.activeGames--;
+    }
+
+    Promise.all([
+      this.maybeRehash(firstPlayer),
+      this.maybeRehash(secondPlayer),
+    ]).catch((e) => {
+      debug('Rehash error', e);
+    });
+
+    return res;
   }
 }

@@ -3,6 +3,7 @@ import { EventEmitter } from 'events';
 import * as ws from 'ws';
 import * as Joi from 'joi';
 import { Buffer } from 'buffer';
+import { Verifier } from 'proof-of-work';
 
 import { Offer, IConfig, IOpponentResult } from './game';
 import * as schema from './schema';
@@ -33,7 +34,6 @@ export class Player extends EventEmitter {
   private readonly requests: RequestMap = new Map();
   private privName: string | undefined;
   private privHash: string | undefined;
-  private privActiveGames: number = 0;
 
   constructor(private readonly ws: ws,
               private readonly options: IPlayerOptions) {
@@ -67,11 +67,7 @@ export class Player extends EventEmitter {
     return this.privHash;
   }
 
-  public get activeGames(): number {
-    return this.privActiveGames;
-  }
-
-  public async init(): Promise<Buffer> {
+  public async init(pow: Verifier) {
     const raw = await this.send({
       kind: 'init',
       version: VERSION,
@@ -87,7 +83,13 @@ export class Player extends EventEmitter {
 
     this.privName = value.name!;
 
-    return Buffer.from(value.challenge!, 'hex');
+    const challenge = Buffer.from(value.challenge!, 'hex');
+
+    if (!pow.check(challenge)) {
+      const error = new Error('Invalid proof of work');
+      this.error(error);
+      throw error;
+    }
   }
 
   public close(err?: Error) {
@@ -105,8 +107,6 @@ export class Player extends EventEmitter {
   }
 
   public async start(game: string, config: IConfig) {
-    this.privActiveGames++;
-
     debug('starting game %s', game);
     const raw = await this.send({ kind: 'start', game, config });
     const { error, value } = Joi.validate(raw, schema.StartResponse);
@@ -119,8 +119,6 @@ export class Player extends EventEmitter {
   }
 
   public async end(game: string, result: IOpponentResult) {
-    this.privActiveGames--;
-
     debug('ending game %s', game);
     const raw = await this.send({ kind: 'end', game, result });
     const { error, value } = Joi.validate(raw, schema.EndResponse);
