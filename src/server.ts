@@ -81,7 +81,7 @@ export class Server extends http.Server {
     super();
 
     this.options = Object.assign({
-      complexity: 21, // proof-of-work
+      complexity: 20, // proof-of-work
       powInterval: 300000,
 
       initTimeout: 60000, // 1 min
